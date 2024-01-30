@@ -58,5 +58,5 @@ samples <- as.data.frame.table(samples_mat) |>
     class = ifelse(subject %in% glue("subject_{1:(n_subjects/2)}"), "disease", "healthy")
   )
 
-#write_csv(samples, "linear.csv")
+write_csv(samples, "data/linear.csv")
 ```

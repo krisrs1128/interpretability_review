@@ -9,12 +9,14 @@ knitr::opts_chunk$set(warning = FALSE, message = FALSE)
 ```
 
 ```{r}
+library(gsignal)
 library(tidyverse)
 library(LaplacesDemon)
+library(glue)
 ```
 
 ```{r}
-rbloom <- function(n_time = 50, lambda = 3, win_len = 9, r = 0.9) {
+rbloom <- function(n_time = 50, lambda = 3, win_len = 9, r = 0.9, alpha = 0.4) {
   n_bloom <- max(rpois(1, lambda), 1)
   bloom_times <- sample(seq(win_len, n_time - win_len), n_bloom)
   y <- vector(length = n_time)
@@ -22,7 +24,7 @@ rbloom <- function(n_time = 50, lambda = 3, win_len = 9, r = 0.9) {
     ix <- seq(bloom_times[i] - win_len / 2, bloom_times[i] + win_len / 2)
     y[ix] <- y[ix] + tukeywin(win_len + 1, r)
   }
-  n_time * y / sum(y)
+  alpha * n_time * y / sum(y)
 }
 
 rincrease <- function(n_time = 50, n_steps = 25, alpha = 0.5) {
@@ -54,7 +56,7 @@ plot_trajectory <- function(ys) {
     facet_wrap(~ name)
 }
 
-subcommunities <- function(n_sub = 5, n_taxa = 200, alpha = 0.9) {
+subcommunities <- function(n_sub = 5, n_taxa = 50, alpha = 0.9) {
   rdirichlet(n_sub, rep(alpha, n_taxa))
 }
 
@@ -62,6 +64,83 @@ sapply(1:10, \(i) rbloom()) |>
   plot_trajectory()
 sapply(1:10, \(i) rdecrease()) |>
   plot_trajectory()
-
 heatmap(subcommunities())
 ```
+
+```{r}
+n_samples <- 500
+n_communities <- 5
+n_concepts <- 3 * n_communities
+k_clusters <- 4
+
+concept_weights <- rdirichlet(n_samples, rep(0.9, n_concepts))
+B <- subcommunities(n_communities)
+B <- B[rep(1:n_communities, each = 3), ]
+
+samples <- list()
+concepts <- cbind(
+    sapply(1:n_communities, \(i) rbloom()),
+    sapply(1:n_communities, \(i) rincrease()),
+    sapply(1:n_communities, \(i) rdecrease())
+  )
+for (i in seq_len(n_samples)) {
+  samples[[i]] <- (concepts %*% diag(concept_weights[i, ])) %*% B
+}
+```
+
+```{r}
+samples <- map_dfr(
+  samples, 
+  ~ as_tibble(.) |>
+      mutate(time = row_number()),
+  .id = "subject"
+  ) |>
+  pivot_longer(starts_with("V"), names_to = "taxon")
+
+concept_weights <- concept_weights |>
+  as_tibble() |>
+  mutate(subject = as.character(row_number())) |>
+  rename_with(~ paste0("concept_", .x), starts_with("V"))
+
+samples |>
+  filter(taxon %in% glue("V{1:15}")) |>
+  left_join(concept_weights) |>
+  mutate(concept_group = cut(concept_V15, 4)) |>
+  ggplot() +
+  geom_line(aes(time, value, group = subject), alpha = 0.8) +
+  facet_grid(concept_group ~ taxon)
+```
+
+```{r}
+samples <- samples |>
+  group_by(subject, time) |>
+  mutate(value = 1e4 * value / sum(value))
+```
+
+Now we need to assign these series to different classes. The idea will be to
+cluster the trajectories and randomly assign the neighborhoods to different
+colors.
+
+```{r}
+samples_wide <- samples |>
+  pivot_wider(names_from = c("time", "taxon"), values_from = "value")
+
+kmeans_result <- concept_weights |>
+  select(-subject) |>
+  kmeans(centers = k_clusters)
+
+centers <- kmeans_result$centers
+assignment <- sample(c("healthy", "disease"), k_clusters, replace = TRUE)
+assignment <- assignment[kmeans_result$cluster]
+
+samples <- samples |>
+  mutate(disease = assignment[as.integer(subject)])
+
+samples |>
+  filter(taxon %in% glue("V{1:10}")) |>
+  ggplot() +
+  geom_line(aes(time, value, group = subject), alpha = 0.1, linewidth = 0.4) +
+  facet_grid(disease ~ taxon)
+```
+
+

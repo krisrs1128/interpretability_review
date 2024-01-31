@@ -1,0 +1,67 @@
+---
+title: "concept_generation"
+output: html_document
+date: "`r Sys.Date()`"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(warning = FALSE, message = FALSE)
+```
+
+```{r}
+library(tidyverse)
+library(LaplacesDemon)
+```
+
+```{r}
+rbloom <- function(n_time = 50, lambda = 3, win_len = 9, r = 0.9) {
+  n_bloom <- max(rpois(1, lambda), 1)
+  bloom_times <- sample(seq(win_len, n_time - win_len), n_bloom)
+  y <- vector(length = n_time)
+  for (i in seq_along(bloom_times)) {
+    ix <- seq(bloom_times[i] - win_len / 2, bloom_times[i] + win_len / 2)
+    y[ix] <- y[ix] + tukeywin(win_len + 1, r)
+  }
+  n_time * y / sum(y)
+}
+
+rincrease <- function(n_time = 50, n_steps = 25, alpha = 0.5) {
+  rtrajectory(n_time = n_time, n_steps = n_steps, alpha = alpha, increase = TRUE)
+}
+
+rdecrease <- function(n_time = 50, n_steps = 25, alpha = 0.5) {
+  rtrajectory(n_time = n_time, n_steps = n_steps, alpha = alpha, increase = FALSE)
+}
+
+rtrajectory <- function(n_time = 50, n_steps = 25, alpha = 0.5, increase = TRUE) {
+  if (increase) {
+    steps <- 1 * upper.tri(matrix(1, n_time, n_time))
+  } else {
+    steps <- 1 * lower.tri(matrix(1, n_time, n_time))
+  }
+  steps <- steps[seq(1, nrow(steps), length = n_steps), ]
+  u <- rdirichlet(1, rep(alpha, n_steps))
+  y <- u %*% steps
+  n_time * y / sum(y)
+}
+
+plot_trajectory <- function(ys) {
+  as_tibble(ys) |>
+    mutate(time = row_number()) |>
+    pivot_longer(-time) |>
+    ggplot() +
+    geom_point(aes(time, value)) +
+    facet_wrap(~ name)
+}
+
+subcommunities <- function(n_sub = 5, n_taxa = 200, alpha = 0.9) {
+  rdirichlet(n_sub, rep(alpha, n_taxa))
+}
+
+sapply(1:10, \(i) rbloom()) |>
+  plot_trajectory()
+sapply(1:10, \(i) rdecrease()) |>
+  plot_trajectory()
+
+heatmap(subcommunities())
+```

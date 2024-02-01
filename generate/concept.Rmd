@@ -9,10 +9,15 @@ knitr::opts_chunk$set(warning = FALSE, message = FALSE)
 ```
 
 ```{r}
+library(ranger)
+library(glmnetUtils)
 library(gsignal)
 library(tidyverse)
 library(LaplacesDemon)
 library(glue)
+my_theme <- theme_classic() +
+  theme()
+theme_set(my_theme)
 ```
 
 ```{r}
@@ -27,11 +32,11 @@ rbloom <- function(n_time = 50, lambda = 3, win_len = 9, r = 0.9, alpha = 0.4) {
   alpha * n_time * y / sum(y)
 }
 
-rincrease <- function(n_time = 50, n_steps = 25, alpha = 0.5) {
+rincrease <- function(n_time = 50, n_steps = 25, alpha = 0.3) {
   rtrajectory(n_time = n_time, n_steps = n_steps, alpha = alpha, increase = TRUE)
 }
 
-rdecrease <- function(n_time = 50, n_steps = 25, alpha = 0.5) {
+rdecrease <- function(n_time = 50, n_steps = 25, alpha = 0.3) {
   rtrajectory(n_time = n_time, n_steps = n_steps, alpha = alpha, increase = FALSE)
 }
 
@@ -69,78 +74,94 @@ heatmap(subcommunities())
 
 ```{r}
 n_samples <- 500
-n_communities <- 5
-n_concepts <- 3 * n_communities
-k_clusters <- 4
+n_concepts <- 25
+n_timepoints <- 50
+n_taxa <- 144
+k_clusters <- 24
+```
 
-concept_weights <- rdirichlet(n_samples, rep(0.9, n_concepts))
-B <- subcommunities(n_communities)
-B <- B[rep(1:n_communities, each = 3), ]
+```{r}
+concept_weights <- rdirichlet(n_samples, rep(1, n_concepts))
+concepts <- list()
+for (k in seq_len(n_concepts)) {
+  cur_taxa <- sample(n_taxa, n_taxa * 0.3)
+  x <- matrix(0, n_timepoints, n_taxa)
+  f <- sample(c(rbloom, rincrease, rdecrease), 1)
+  x[, cur_taxa] <- sapply(seq_along(cur_taxa), \(i) f[[1]]())
+  concepts[[k]] <- x
+}
 
 samples <- list()
-concepts <- cbind(
-    sapply(1:n_communities, \(i) rbloom()),
-    sapply(1:n_communities, \(i) rincrease()),
-    sapply(1:n_communities, \(i) rdecrease())
-  )
 for (i in seq_len(n_samples)) {
-  samples[[i]] <- (concepts %*% diag(concept_weights[i, ])) %*% B
+  samples[[i]] <- matrix(0, n_timepoints, n_taxa)
+  for (k in seq_len(n_concepts)) {
+    samples[[i]] <- samples[[i]] + concept_weights[i, k] * concepts[[k]]
+  }
 }
+
+samples <- map_dfr(samples, ~ as_tibble(.) |> mutate(time = row_number()), .id = "subject") |>
+  pivot_longer(starts_with("V"), names_to = "taxon") |>
+  mutate(
+    subject = glue("subject_{subject}"),
+    taxon = str_replace(taxon, "V", "tax_")
+  )
+
+samples |>
+  filter(taxon %in% glue("tax_{1:10}")) |>
+  ggplot() +
+  geom_line(aes(time, value, group = subject), linewidth = 0.2, alpha = 0.5) +
+  facet_wrap(~ taxon)
 ```
 
 ```{r}
-samples <- map_dfr(
-  samples, 
-  ~ as_tibble(.) |>
-      mutate(time = row_number()),
-  .id = "subject"
-  ) |>
-  pivot_longer(starts_with("V"), names_to = "taxon")
-
+matching <- c(rep("healthy", k_clusters / 2), rep("disease", k_clusters / 2))
+assignments <- kmeans(concept_weights, centers = k_clusters)$cluster
 concept_weights <- concept_weights |>
   as_tibble() |>
-  mutate(subject = as.character(row_number())) |>
-  rename_with(~ paste0("concept_", .x), starts_with("V"))
+  mutate(
+    subject = glue("subject_{row_number()}"),
+    class = matching[assignments],
+    assignments = factor(assignments)
+    ) |>
+  pivot_longer(starts_with("V"), names_to = "concept", values_to = "weight")
+```
 
-samples |>
-  filter(taxon %in% glue("V{1:15}")) |>
-  left_join(concept_weights) |>
-  mutate(concept_group = cut(concept_V15, 4)) |>
+```{r, fig.width=12, fig.height=4}
+merged_samples <- concept_weights |>
+  select(subject, assignments, class) |>
+  unique() |>
+  left_join(samples)
+
+merged_samples |>
+  filter(
+    taxon %in% glue("tax_{1:14}"),
+    assignments %in% c(1:5, 20:24)
+  ) |>
   ggplot() +
-  geom_line(aes(time, value, group = subject), alpha = 0.8) +
-  facet_grid(concept_group ~ taxon)
+  geom_line(aes(time, value, col = assignments, group = subject), alpha = 0.2, linewidth = 0.4) +
+  facet_grid(class + assignments ~ reorder(taxon, value))
 ```
 
 ```{r}
-samples <- samples |>
-  group_by(subject, time) |>
-  mutate(value = 1e4 * value / sum(value))
+merged_samples |>
+  select(subject, taxon, time, value, class) |>
+  rename(Freq = value) |>
+  write_csv("../data/blooms.csv")
 ```
-
-Now we need to assign these series to different classes. The idea will be to
-cluster the trajectories and randomly assign the neighborhoods to different
-colors.
 
 ```{r}
-samples_wide <- samples |>
-  pivot_wider(names_from = c("time", "taxon"), values_from = "value")
+xy <- merged_samples |>
+  select(class, subject, time, taxon, value) |>
+  pivot_wider(names_from = c("taxon", "time")) |>
+  mutate(class = factor(class)) |>
+  select(-subject)
 
-kmeans_result <- concept_weights |>
-  select(-subject) |>
-  kmeans(centers = k_clusters)
+fit_rf <- ranger(class ~ ., data = xy)
+fit_rf
 
-centers <- kmeans_result$centers
-assignment <- sample(c("healthy", "disease"), k_clusters, replace = TRUE)
-assignment <- assignment[kmeans_result$cluster]
-
-samples <- samples |>
-  mutate(disease = assignment[as.integer(subject)])
-
-samples |>
-  filter(taxon %in% glue("V{1:10}")) |>
-  ggplot() +
-  geom_line(aes(time, value, group = subject), alpha = 0.1, linewidth = 0.4) +
-  facet_grid(disease ~ taxon)
+fit_glm <- cv.glmnet(class ~ ., xy, family = "binomial")
+y_hat <- predict(fit_glm, xy)
+data.frame(y = xy$class, y_hat = ifelse(y_hat[, 1] > 0, "healthy", "disease")) |>
+  count(y, y_hat)
 ```
-
 

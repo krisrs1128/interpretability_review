@@ -1,0 +1,82 @@
+---
+title: "Directly Interpretable Models"
+output: html_document
+date: "`r Sys.Date()`"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(warning = FALSE, message = FALSE)
+```
+
+```{r}
+library(tidyverse)
+library(tidymodels)
+library(glue)
+my_theme <- theme_classic() +
+  theme()
+theme_set(my_theme)
+set.seed(20240201)
+```
+
+```{r}
+error_rate <- function(spec, xy) {
+  y_hat <- fit(spec, class ~ ., data = xy) |>
+    predict(xy)
+  errors <- bind_cols(class = xy$class, y_hat) |>
+    count(class, .pred_class)
+  list(errors = errors, fit = fit)
+}
+```
+
+```{r}
+samples <- read_csv("../data/blooms.csv") |>
+  select(class, subject, time, taxon, Freq) |>
+  mutate(class = factor(class))
+```
+
+First approach to directly interpretability is to manually define predictive
+features.
+
+```{r}
+features <- samples |>
+  group_by(taxon, subject) |>
+  summarise(
+    slope = coef(fastLm(Freq ~ time))[1],
+    curvature = mean(diff(Freq, 2) ^ 2)
+  )
+```
+
+```{r}
+xy_features <- samples |>
+  select(subject, class, taxon) |>
+  unique() |>
+  left_join(features) |>
+  pivot_wider(names_from = "taxon", values_from = c("slope", "curvature")) |>
+  select(-subject)
+
+fit_glm <- cv.glmnet(class ~ ., xy_features, family = "binomial")
+y_hat <- predict(fit_glm, xy_features)
+data.frame(y = xy$class, y_hat = ifelse(y_hat[, 1] > 0, "healthy", "disease")) |>
+  count(y, y_hat)
+```
+
+This does quite a bit better than ordinary glmnet. Still a little ways away from
+transformers.
+
+```{r}
+logistic_reg(penalty = 0.005) %>% 
+  set_engine("glmnet") |>
+  error_rate(xy_features)
+
+decision_tree() |>
+  set_mode("classification") |>
+  error_rate(xy)
+
+decision_tree() |>
+  set_mode("classification") |>
+  error_rate(xy_features)
+
+nearest_neighbor(neighbors = 5) |>
+  set_mode("classification") |>
+  error_rate(xy_features)
+```

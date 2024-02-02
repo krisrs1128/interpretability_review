@@ -1,0 +1,21 @@
+---
+title: "R Notebook"
+output: rmdformats::readthedown
+---
+
+```{r}
+library(tidyverse)
+```
+
+```{r}
+embeddings <- read_csv("../data/embeddings.csv", header = FALSE)
+```
+
+```{r}
+embeddings |>
+  pivot_longer(names_to = "feature") |>
+  mutate(
+    taxon = rep(1:144, each = 50),
+    time = rep(1:50, 144)
+  )
+```

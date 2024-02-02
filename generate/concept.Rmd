@@ -18,6 +18,7 @@ library(glue)
 my_theme <- theme_classic() +
   theme()
 theme_set(my_theme)
+set.seed(20240201)
 ```
 
 ```{r}
@@ -164,4 +165,3 @@ y_hat <- predict(fit_glm, xy)
 data.frame(y = xy$class, y_hat = ifelse(y_hat[, 1] > 0, "healthy", "disease")) |>
   count(y, y_hat)
 ```
-

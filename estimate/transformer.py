@@ -44,7 +44,7 @@ class LitTransformer(L.LightningModule):
         x, y = batch
         _, p_hat = self.model(x)
         loss = nn.functional.binary_cross_entropy_with_logits(p_hat, y)
-        self.log("train_loss", loss)
+        self.log("train_loss", loss, on_epoch=True)
         return loss
 
     def configure_optimizers(self):

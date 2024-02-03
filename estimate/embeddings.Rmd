@@ -4,18 +4,110 @@ output: rmdformats::readthedown
 ---
 
 ```{r}
+library(glue)
+library(sparsepca)
 library(tidyverse)
+set.seed(20240203)
 ```
 
 ```{r}
-embeddings <- read_csv("../data/embeddings.csv", header = FALSE)
+n_taxa <- 144
+n_timepoints <- 50
+alpha <- 5e-3
+beta <- 1e-2
+feature_names <- apply(expand.grid(glue("tax{1:n_taxa}"), glue("t{1:n_timepoints}")), 1, paste, collapse = "_")
+
+embeddings <- read_csv("../data/embeddings.csv", col_names = FALSE) |>
+  set_names(feature_names)
+blooms <- read_csv("../data/blooms.csv")
+
+classes <- blooms |>
+  select(subject, class) |>
+  unique() |>
+  pull(class)
+```
+
+```{r}
+pca_res = rspca(embeddings, k = 2, alpha = alpha, beta = beta)
+bind_cols(class = classes, pca_res$scores) |>
+  ggplot() +
+  geom_point(aes(`...2`, `...3`, col = class))
+```
+
+```{r}
+blooms_wider <- blooms |>
+  select(subject, taxon, time, Freq) |>
+  pivot_wider(names_from = c("taxon", "time"), values_from = "Freq")
+
+pca_original <- blooms_wider |>
+  select(-subject) |>
+  rspca(k = 2, alpha = alpha, beta = beta)
+
+bind_cols(class = classes, pca_original$scores) |>
+  ggplot() +
+  geom_point(aes(`...2`, `...3`, col = class))
 ```
 
 ```{r}
 embeddings |>
-  pivot_longer(names_to = "feature") |>
-  mutate(
-    taxon = rep(1:144, each = 50),
-    time = rep(1:50, 144)
-  )
+  select(starts_with("tax_75"))
+
+blooms |>
+  filter(taxon == "tax_75") |>
+  ggplot() +
+  geom_line(aes(time, Freq, group = subject, col = class), alpha = 0.7, linewidth = 0.2) +
+  facet_grid(class ~ .)
+```
+
+```{r}
+pca_taxon <- blooms |>
+  filter(taxon == "tax_75") |>
+  pivot_wider(names_from = "time", values_from = "Freq") |>
+  select(!any_of(c("subject", "taxon", "class"))) |>
+  rspca(k = 2, alpha = alpha, beta = beta)
+  
+bind_cols(class = classes, pca_taxon$scores) |>
+  ggplot() +
+  geom_point(aes(`...2`, `...3`, col = class))
+
+pca_taxon_z <- embeddings |>
+  select(starts_with("tax75")) |>
+  rspca(k = 2, alpha = alpha, beta = beta)
+  
+bind_cols(class = classes, pca_taxon_z$scores) |>
+  ggplot() +
+  geom_point(aes(`...2`, `...3`, col = class))
+```
+
+
+```{r, eval = FALSE}
+library(umap)
+config <- umap.defaults
+config$n_neighbors <- 10
+config$min_dist <- 0.2
+umap_res <- umap(embeddings, config = config)
+
+bind_cols(class = classes, umap_res$layout) |>
+  ggplot() +
+  geom_point(aes(`...2`, `...3`, col = class))
+```
+
+Which taxa would be interesting to visualize?
+
+```{r, eval = FALSE}
+p <- list()
+for (i in seq_len(n_taxa)) {
+  taxa_data <- embeddings |>
+    select(starts_with(glue("tax{i}_"))) |>
+    as.matrix()
+
+  pca_res <- princomp(taxa_data)
+  p[[i]] <- bind_cols(class = classes, pca_res$scores[, 1:5]) |>
+    ggplot() +
+    geom_point(aes(Comp.1, Comp.2, col = class))
+}
+
+for (i in seq_along(p)) {
+  ggsave(glue("~/Downloads/tax_{i}.png"), p[[i]])
+}
 ```

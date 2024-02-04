@@ -35,12 +35,8 @@ bind_cols(class = classes, pca_res$scores) |>
 ```
 
 ```{r}
-blooms_wider <- blooms |>
-  select(subject, taxon, time, Freq) |>
-  pivot_wider(names_from = c("taxon", "time"), values_from = "Freq")
-
-pca_original <- blooms_wider |>
-  select(-subject) |>
+pca_original <- blooms |>
+  select(-subject:-class) |>
   rspca(k = 2, alpha = alpha, beta = beta)
 
 bind_cols(class = classes, pca_original$scores) |>
@@ -49,11 +45,11 @@ bind_cols(class = classes, pca_original$scores) |>
 ```
 
 ```{r}
-embeddings |>
-  select(starts_with("tax_75"))
-
+tax_id <- "tax75"
 blooms |>
-  filter(taxon == "tax_75") |>
+  select(subject, class, starts_with(tax_id)) |>
+  pivot_longer(starts_with(tax_id), values_to = "Freq") |>
+  mutate(time = as.integer(str_extract(name, "[0-9]+$"))) |>
   ggplot() +
   geom_line(aes(time, Freq, group = subject, col = class), alpha = 0.7, linewidth = 0.2) +
   facet_grid(class ~ .)
@@ -61,8 +57,7 @@ blooms |>
 
 ```{r}
 pca_taxon <- blooms |>
-  filter(taxon == "tax_75") |>
-  pivot_wider(names_from = "time", values_from = "Freq") |>
+  select(subject, class, starts_with(tax_id)) |>
   select(!any_of(c("subject", "taxon", "class"))) |>
   rspca(k = 2, alpha = alpha, beta = beta)
   
@@ -71,7 +66,7 @@ bind_cols(class = classes, pca_taxon$scores) |>
   geom_point(aes(`...2`, `...3`, col = class))
 
 pca_taxon_z <- embeddings |>
-  select(starts_with("tax75")) |>
+  select(starts_with(tax_id)) |>
   rspca(k = 2, alpha = alpha, beta = beta)
   
 bind_cols(class = classes, pca_taxon_z$scores) |>
@@ -84,8 +79,8 @@ bind_cols(class = classes, pca_taxon_z$scores) |>
 ```{r}
 endpoints <- embeddings |>
   mutate(id = row_number()) |>
-  filter(id %in% c(305, 470)) |>
-  select(starts_with("tax75"))
+  filter(id %in% c(292, 458)) |> # 284 -> 218 in tax128 also interesting
+  select(starts_with(tax_id))
 
 interpolations <- list()
 lambdas <- seq(0, 1, length.out = 100)
@@ -97,25 +92,24 @@ interpolations <- bind_rows(interpolations)
 
 # now find the closest points to these interpolations
 embeddings_subset <- embeddings |>
-  select(starts_with("tax75"))
+  select(starts_with(tax_id))
 
 D <- dist(rbind(interpolations, embeddings_subset), "manhattan") |>
   as.matrix()
 
-unique(apply(D[1:100, 101:ncol(D)], 1, which.min))
+intermediates <- unique(apply(D[1:100, 101:ncol(D)], 1, which.min))
 ```
 
-
-```{r, eval = FALSE}
-library(umap)
-config <- umap.defaults
-config$n_neighbors <- 10
-config$min_dist <- 0.2
-umap_res <- umap(embeddings, config = config)
-
-bind_cols(class = classes, umap_res$layout) |>
+```{r}
+blooms[intermediates, ] |>
+  select(subject, class, starts_with(tax_id)) |>
+  mutate(
+    index = factor(intermediates, levels = intermediates)) |>
+  pivot_longer(starts_with("tax")) |>
+  mutate(time = as.integer(str_extract(name, "[0-9]+$"))) |>
   ggplot() +
-  geom_point(aes(`...2`, `...3`, col = class))
+  geom_line(aes(time, value, group = subject, col = class)) +
+  facet_wrap(index ~ .)
 ```
 
 Which taxa would be interesting to visualize?

@@ -8,18 +8,22 @@ import numpy as np
 
 
 class LinearData(Dataset):
-  def __init__(self, data):
+  def __init__(self, data, n_time=50, scale=True):
     self.data = data
     self.subjects = data["subject"].unique()
+    self.n_time = n_time
+    self.y = [1.0 * (yi == "healthy") for yi in data["class"].values]
+    self.x = np.array(data.iloc[:, 2:])
+    if scale:
+       self.x = (self.x - np.mean(self.x, axis=0)) / np.std(self.x, axis=0)
+
 
   def __len__(self):
     return len(self.subjects)
 
   def __getitem__(self, index):
-    samples = self.data[self.data["subject"] == self.subjects[index]]
-    x = samples.pivot(index="time", columns="taxon", values="Freq")
-    y = [1.0 * (samples["class"].values[0] == "healthy")]
-    return np.array(x).astype("float32"), torch.Tensor(y)
+    x = self.x[index, :].reshape((self.n_time, -1))
+    return x.astype("float32"), torch.Tensor([self.y[index]])
 
 
 class Transformer(nn.Module):

@@ -1,0 +1,99 @@
+---
+title: "Untitled"
+output: html_document
+date: "`r Sys.Date()`"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(tidyverse)
+set.seed(20240203)
+```
+
+```{r}
+n_taxa <- 144
+n_timepoints <- 50
+
+feature_names <- apply(expand.grid(glue("tax{1:n_taxa}"), glue("t{1:n_timepoints}")), 1, paste, collapse = "_")
+attributions <- read_csv("../data/attributions.csv") |>
+  set_names(feature_names)
+
+blooms <- read_csv("../data/blooms.csv")
+classes <- blooms |>
+  select(subject, class) |>
+  unique() |>
+  pull(class)
+```
+
+```{r}
+attr_subset <- attributions |>
+  mutate(subject = row_number(), class = classes[1:63]) |>
+  select(subject, class, starts_with("tax75"))
+
+hclust_res <- attr_subset |>
+  select(starts_with("tax")) |>
+  dist() |>
+  hclust()
+
+attr_subset |>
+  pivot_longer(-subject:-class, names_to = "feature") |>
+  separate(feature, c("taxon", "timepoint")) |>
+  mutate(
+    timepoint = as.integer(str_extract(timepoint, "[0-9]+")),
+    subject = factor(subject, hclust_res$order)
+    ) |>
+  ggplot() +
+  geom_tile(aes(timepoint, subject, fill = value)) +
+  scale_fill_gradient2() +
+  scale_x_continuous(expand = c(0, 0))
+```
+
+```{r}
+attr75 <- attributions |>
+  mutate(subject = glue("subject_{row_number()}")) |>
+  pivot_longer(-subject, names_to = "feature", values_to = "attribution") |>
+  filter(str_detect(feature, "tax75")) |>
+  mutate(time = as.integer(str_extract(feature, "[0-9]+$")))
+```
+
+
+```{r}
+blooms |>
+  filter(taxon %in% c("tax_75"), subject %in% glue("subject_{c(29, 2, 11, 28)}")) |>
+  left_join(attr75) |>
+  ggplot(aes(time, Freq)) +
+  geom_line(aes(group = subject)) +
+  geom_point(aes(size = abs(attribution), col = attribution)) +
+  scale_color_gradient2() +
+  scale_size_area(max_size = 4) +
+  facet_grid(class + subject ~ ., scales = "free_y")
+```
+
+```{r}
+blooms |>
+  filter(taxon %in% c("tax_75"), subject %in% glue("subject_{c(58, 37, 4, 1)}")) |>
+  left_join(attr75) |>
+  ggplot(aes(time, Freq)) +
+  geom_line(aes(group = subject), col = "#0c0c0c") +
+  geom_point(aes(size = abs(attribution), col = attribution)) +
+  scale_color_gradient2() +
+  scale_size(range = c(0.5, 6)) +
+  facet_grid(class + subject ~ ., scales = "free_y")
+
+```
+
+```{r}
+blooms |>
+  filter(taxon %in% c("tax_75")) |>
+  ggplot() +
+  geom_line(
+    aes(time, Freq, group = subject), 
+    linewidth = 0.2, col = "#0c0c0c", alpha = 0.8
+  ) +
+  scale_x_continuous(expand = c(0, 0)) +
+  facet_grid(class ~ .)
+```
+

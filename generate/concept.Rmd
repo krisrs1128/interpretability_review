@@ -135,12 +135,24 @@ merged_samples <- concept_weights |>
 
 merged_samples |>
   filter(
-    taxon %in% glue("tax{1:14}"),
-    assignments %in% c(1:5, 20:24)
+    taxon %in% glue("tax{1:10}"),
+    subject %in% glue("subject_{40:55}")
+#    assignments %in% c(1:5, 20:24)
   ) |>
+  mutate(taxon = str_replace(taxon, "tax", "Species ")) |>
   ggplot() +
-  geom_line(aes(time, value, col = assignments, group = subject), alpha = 0.2, linewidth = 0.4) +
-  facet_grid(class + assignments ~ reorder(taxon, value))
+  geom_line(aes(time, value, col = class, group = subject), alpha = 0.9, linewidth = 0.5) +
+  scale_x_continuous(expand = c(0, 0)) +
+  scale_color_manual(values = c("#730739", "#4BA68C")) +
+  labs(x = "Time", y = "Abundance", col = "Group") +
+  guides(color = guide_legend(override.aes = list(linewidth = 2))) +
+  facet_wrap(~ reorder(taxon, value), scales = "free_y", ncol = 5) +
+  theme(
+    axis.title = element_text(size = 16),
+    strip.text = element_text(size = 14),
+    legend.title = element_text(size = 16),
+    legend.text = element_text(size = 14)
+  )
 ```
 
 ```{r}

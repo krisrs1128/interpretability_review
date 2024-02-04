@@ -1,0 +1,48 @@
+---
+title: "Untitled"
+output: html_document
+date: "`r Sys.Date()`"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(tidyverse)
+library(glue)
+my_theme <- theme_classic() +
+  theme()
+theme_set(my_theme)
+set.seed(20240201)
+```
+
+```{r}
+concepts <- read_csv("../data/concepts.csv")
+blooms <- read_csv("../data/blooms.csv")
+```
+
+
+```{r}
+taxa_data <- blooms |>
+  filter(row_number() < 150) |>
+  select(subject, starts_with("tax1_"), starts_with("tax2_"), starts_with("tax3_"), starts_with("tax4_"), starts_with("tax5_")) |>
+  left_join(concepts)
+
+library(superheat)
+p <- list()
+for (i in seq_len(15)) {
+  p[[i]] <- taxa_data |>
+    filter(.data[[glue("V{i}")]] == 1) |>
+    select(starts_with("tax")) |>
+    as.matrix() |>
+    superheat(pretty.order.rows = TRUE)
+}
+
+p[[1]]
+```
+
+```{r}
+read_csv("../data/p_hat_concept.csv")
+```
+

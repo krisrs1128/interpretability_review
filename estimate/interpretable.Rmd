@@ -13,6 +13,8 @@ library(RcppEigen)
 library(broom)
 library(glmnetUtils)
 library(glue)
+library(patchwork)
+library(rpart.plot)
 library(tidymodels)
 library(tidyverse)
 my_theme <- theme_classic() +
@@ -67,22 +69,6 @@ This does quite a bit better than ordinary glmnet. Still a little ways away from
 transformers.
 
 ```{r}
-logistic_reg(penalty = 0.005) %>% 
-  set_engine("glmnet") |>
-  error_rate(xy)
-
-logistic_reg(penalty = 0.005) %>% 
-  set_engine("glmnet") |>
-  error_rate(xy_features)
-
-decision_tree() |>
-  set_mode("classification") |>
-  error_rate(xy)
-
-decision_tree() |>
-  set_mode("classification") |>
-  error_rate(xy_features)
-
 # this one is cheating a little...
 nearest_neighbor(neighbors = 5) |>
   set_mode("classification") |>
@@ -93,17 +79,19 @@ nearest_neighbor(neighbors = 5) |>
 problem_rec <- recipe(class ~ ., data = xy) |>
   update_role(class, new_role = "outcome") |>
   step_normalize(all_numeric())
-  
+
 wf <- workflow() |>
   add_recipe(problem_rec)
 
 tune_spec <- logistic_reg(penalty = tune(), mixture = 1) |>
   set_engine("glmnet")
 
+control <- control_grid(verbose = TRUE, save_workflow = TRUE)
 lasso_grid <- tune_grid(
   wf |> add_model(tune_spec),
   vfold_cv(xy, v = 4),
-  grid = grid_regular(penalty(range=c(-2.66610, -0.66610)), levels = 50)
+  grid = grid_regular(penalty(range=c(-2.66610, -0.66610)), levels = 50),
+  control = control
 )
 
 p1 <- collect_metrics(lasso_grid) |>
@@ -120,12 +108,7 @@ p1 <- collect_metrics(lasso_grid) |>
   labs(x = expression(log(lambda)), y = "CV Accuracy") +
   facet_wrap(~ .metric)
 
-final_lasso <- finalize_workflow(
-  add_model(wf, tune_spec),
-  select_best(lasso_grid, "accuracy")
-) |>
-  fit(xy)
-
+final_lasso <- fit_best(lasso_grid, "accuracy")
 coefs <- tidy(final_lasso$fit$fit$fit)
 p2 <- ggplot(coefs) +
   geom_hline(yintercept = 0, linewidth = 1.5) +
@@ -133,12 +116,85 @@ p2 <- ggplot(coefs) +
   labs(x = expression(log(lambda)), y = "Coefficient Estimate") +
   scale_x_reverse()
 
-library(patchwork)
-
 p1 / p2
-
 tidy(final_lasso) |>
   arrange(-estimate) |>
   select(term, estimate)
+```
 
+Here is the analogous code for a decision tree.
+
+
+```{r}
+tree_spec <- decision_tree(cost_complexity = tune()) |>
+  set_engine("rpart") |>
+  set_mode("classification")
+
+control <- control_grid(verbose = TRUE, save_workflow = TRUE)
+tree_grid <- tune_grid(
+  wf |> add_model(tree_spec),
+  vfold_cv(xy, v = 4),
+  grid = grid_regular(cost_complexity(), levels = 10),
+  control = control
+)
+
+collect_metrics(tree_grid) |>
+  filter(.metric == "accuracy") |>
+  ggplot(aes(log(cost_complexity))) +
+  geom_errorbar(aes(
+    ymin = mean - std_err,
+    ymax = mean + std_err
+  ),
+  alpha = 0.5
+  ) +
+  geom_point(aes(y = mean), col = "#545454") +
+  scale_x_reverse() +
+  labs(x = "Cost Complexity", y = "CV Accuracy") +
+  facet_wrap(~ .metric) +
+  theme(
+    strip.text = element_text(size = 16),
+    axis.title = element_text(size = 18),
+    axis.text = element_text(size = 16)
+  )
+
+final_tree <- fit_best(tree_grid, metric = "accuracy")
+extract_fit_engine(final_tree) |>
+  rpart.plot()
+```
+
+Let's inspect the stability of these models...
+
+```{r}
+xy_split <- initial_split(xy, prop = 0.5)
+
+fits <- list(tree = list(), lasso = list())
+split_funs <- c(training, testing)
+for (i in seq_along(split_funs)) {
+  #fits[["tree"]][[i]] <- wf |>
+  #  add_model(tree_spec) |>
+  #  finalize_workflow(select_best(tree_grid, "accuracy")) |>
+  #  fit(xy_split[[i]])
+  fits[["lasso"]][[i]] <- wf |>
+    add_model(tune_spec) |>
+    finalize_workflow(select_best(lasso_grid, "accuracy")) |>
+    fit(split_funs[[i]](xy_split))
+}
+
+coef_compare <- bind_rows(
+  tidy(extract_fit_parsnip(fits[["lasso"]][[1]])),
+  tidy(extract_fit_parsnip(fits[["lasso"]][[2]])),
+  .id = "split"
+) |>
+  pivot_wider(names_from = split, values_from = estimate)
+
+library(ggrepel)
+ggplot(coef_compare, aes(`1`, `2`)) +
+  geom_point() +
+  geom_text_repel(data = filter(coef_compare, abs(`1`) + abs(`2`) > 0.4), aes(`1`, `2`, label = term), size = 6) +
+  labs(x = "Split 1", y = "Split 2", title = expression(paste(hat(beta), " ", "across splits"))) +
+  theme(
+    axis.title = element_text(size = 20),
+    axis.text = element_text(size = 18),
+    title = element_text(size = 20)
+  )
 ```

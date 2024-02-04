@@ -1,0 +1,54 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(tidyverse)
+library(tidymodels)
+library(glue)
+my_theme <- theme_classic() +
+  theme()
+theme_set(my_theme)
+set.seed(20240201)
+```
+
+```{r}
+samples <- read_csv("../data/blooms.csv") |>
+  mutate(class = factor(class))
+p_hat <- read_csv("../data/p_hat.csv")
+colnames(p_hat) <- c("index", "prob")
+p_hat <- p_hat |>
+  mutate(subject = glue("subject_{index + 1}"))
+
+xy <- samples |>
+  left_join(p_hat) |>
+  select(-subject:-class)
+```
+
+```{r}
+p_hat <- decision_tree() |>
+  set_mode("regression") |>
+  fit(prob ~ ., data = xy) |>
+  predict(xy)
+
+bind_cols(class = samples$class, p_hat) |>
+  count(class, .pred > 0)
+```
+
+```{r}
+xy <- select(samples, -subject)
+y_hat <- decision_tree() |>
+  set_mode("classification") |>
+  fit(class ~ ., data = xy) |>
+  predict(xy)
+
+bind_cols(class = samples$class, y_hat) |>
+  count(class, .pred_class)
+```
+

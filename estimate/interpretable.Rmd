@@ -11,6 +11,7 @@ knitr::opts_chunk$set(warning = FALSE, message = FALSE)
 ```{r}
 library(RcppEigen)
 library(broom)
+library(ggrepel)
 library(glmnetUtils)
 library(glue)
 library(patchwork)
@@ -31,48 +32,83 @@ error_rate <- function(spec, xy) {
     count(class, .pred_class)
   list(errors = errors, fit = fit)
 }
+
+#' Wrapper to run the tidymodels glmnet workflow
+lasso_outputs <- function(tune_spec, xy) {
+  control <- control_grid(verbose = TRUE, save_workflow = TRUE)
+  lasso_grid <- tune_grid(
+    wf |> add_model(tune_spec),
+    vfold_cv(xy, v = 4),
+    grid = grid_regular(penalty(range=c(-2.66610, -0.66610)), levels = 50),
+    control = control
+  )
+
+  p1 <- collect_metrics(lasso_grid) |>
+    filter(.metric == "accuracy") |>
+    ggplot(aes(log(penalty))) +
+    geom_errorbar(aes(
+      ymin = mean - std_err,
+      ymax = mean + std_err
+    ),
+    alpha = 0.5
+    ) +
+    geom_point(aes(y = mean), col = "#545454") +
+    scale_x_reverse() +
+    labs(x = expression(log(lambda)), y = "CV Accuracy") +
+    facet_wrap(~ .metric)
+
+  final_lasso <- fit_best(lasso_grid, "accuracy")
+  coefs <- tidy(final_lasso$fit$fit$fit)
+  p2 <- ggplot(coefs) +
+    geom_hline(yintercept = 0, linewidth = 1.5) +
+    geom_line(aes(log(lambda), estimate, group = term), col = "#0c0c0c") +
+    labs(x = expression(log(lambda)), y = "Coefficient Estimate") +
+    scale_x_reverse()
+
+  list(plot = p1 / p2, fit = final_lasso, grid = lasso_grid)
+}
+
+#' Wrapper to run the tidymodels rpart workflow
+tree_outputs <- function(tree_spec, xy) {
+  control <- control_grid(verbose = TRUE, save_workflow = TRUE)
+  tree_grid <- tune_grid(
+    wf |> add_model(tree_spec),
+    vfold_cv(xy, v = 4),
+    grid = grid_regular(cost_complexity(), levels = 10),
+    control = control
+  )
+
+  collect_metrics(tree_grid) |>
+    filter(.metric == "accuracy") |>
+    ggplot(aes(log(cost_complexity))) +
+    geom_errorbar(aes(
+      ymin = mean - std_err,
+      ymax = mean + std_err
+    ),
+    alpha = 0.5
+    ) +
+    geom_point(aes(y = mean), col = "#545454") +
+    scale_x_reverse() +
+    labs(x = "Cost Complexity", y = "CV Accuracy") +
+    facet_wrap(~ .metric) +
+    theme(
+      strip.text = element_text(size = 16),
+      axis.title = element_text(size = 18),
+      axis.text = element_text(size = 16)
+    )
+
+  final_tree <- fit_best(tree_grid, metric = "accuracy")
+  extract_fit_engine(final_tree) |>
+    rpart.plot()
+  list(fit = final_tree, grid = tree_grid)
+}
+
 ```
 
 ```{r}
 samples <- read_csv("../data/blooms.csv") |>
   mutate(class = factor(class))
 xy <- select(samples, -subject)
-```
-
-First approach to directly interpretability is to manually define predictive
-features.
-
-```{r}
-features <- samples |>
-  group_by(taxon, subject) |>
-  summarise(
-    slope = coef(fastLm(Freq ~ time))[1],
-    curvature = mean(diff(Freq, 2) ^ 2)
-  )
-```
-
-```{r}
-xy_features <- samples |>
-  select(subject, class, taxon) |>
-  unique() |>
-  left_join(features) |>
-  pivot_wider(names_from = "taxon", values_from = c("slope", "curvature")) |>
-  select(-subject)
-
-fit_glm <- cv.glmnet(class ~ ., xy_features, family = "binomial")
-y_hat <- predict(fit_glm, xy_features)
-data.frame(y = xy_features$class, y_hat = ifelse(y_hat[, 1] > 0, "healthy", "disease")) |>
-  count(y, y_hat)
-```
-
-This does quite a bit better than ordinary glmnet. Still a little ways away from
-transformers.
-
-```{r}
-# this one is cheating a little...
-nearest_neighbor(neighbors = 5) |>
-  set_mode("classification") |>
-  error_rate(xy_features)
 ```
 
 ```{r}
@@ -86,40 +122,11 @@ wf <- workflow() |>
 tune_spec <- logistic_reg(penalty = tune(), mixture = 1) |>
   set_engine("glmnet")
 
-control <- control_grid(verbose = TRUE, save_workflow = TRUE)
-lasso_grid <- tune_grid(
-  wf |> add_model(tune_spec),
-  vfold_cv(xy, v = 4),
-  grid = grid_regular(penalty(range=c(-2.66610, -0.66610)), levels = 50),
-  control = control
-)
-
-p1 <- collect_metrics(lasso_grid) |>
-  filter(.metric == "accuracy") |>
-  ggplot(aes(log(penalty))) +
-  geom_errorbar(aes(
-    ymin = mean - std_err,
-    ymax = mean + std_err
-  ),
-  alpha = 0.5
-  ) +
-  geom_point(aes(y = mean), col = "#545454") +
-  scale_x_reverse() +
-  labs(x = expression(log(lambda)), y = "CV Accuracy") +
-  facet_wrap(~ .metric)
-
-final_lasso <- fit_best(lasso_grid, "accuracy")
-coefs <- tidy(final_lasso$fit$fit$fit)
-p2 <- ggplot(coefs) +
-  geom_hline(yintercept = 0, linewidth = 1.5) +
-  geom_line(aes(log(lambda), estimate, group = term), col = "#0c0c0c") +
-  labs(x = expression(log(lambda)), y = "Coefficient Estimate") +
-  scale_x_reverse()
-
-p1 / p2
-tidy(final_lasso) |>
+lasso_result <- lasso_outputs(tune_spec, xy)
+tidy(lasso_result$fit) |>
   arrange(-estimate) |>
   select(term, estimate)
+lasso_result$plot
 ```
 
 Here is the analogous code for a decision tree.
@@ -130,36 +137,7 @@ tree_spec <- decision_tree(cost_complexity = tune()) |>
   set_engine("rpart") |>
   set_mode("classification")
 
-control <- control_grid(verbose = TRUE, save_workflow = TRUE)
-tree_grid <- tune_grid(
-  wf |> add_model(tree_spec),
-  vfold_cv(xy, v = 4),
-  grid = grid_regular(cost_complexity(), levels = 10),
-  control = control
-)
-
-collect_metrics(tree_grid) |>
-  filter(.metric == "accuracy") |>
-  ggplot(aes(log(cost_complexity))) +
-  geom_errorbar(aes(
-    ymin = mean - std_err,
-    ymax = mean + std_err
-  ),
-  alpha = 0.5
-  ) +
-  geom_point(aes(y = mean), col = "#545454") +
-  scale_x_reverse() +
-  labs(x = "Cost Complexity", y = "CV Accuracy") +
-  facet_wrap(~ .metric) +
-  theme(
-    strip.text = element_text(size = 16),
-    axis.title = element_text(size = 18),
-    axis.text = element_text(size = 16)
-  )
-
-final_tree <- fit_best(tree_grid, metric = "accuracy")
-extract_fit_engine(final_tree) |>
-  rpart.plot()
+final_tree <- tree_outputs(tree_spec, xy)
 ```
 
 Let's inspect the stability of these models...
@@ -170,13 +148,9 @@ xy_split <- initial_split(xy, prop = 0.5)
 fits <- list(tree = list(), lasso = list())
 split_funs <- c(training, testing)
 for (i in seq_along(split_funs)) {
-  #fits[["tree"]][[i]] <- wf |>
-  #  add_model(tree_spec) |>
-  #  finalize_workflow(select_best(tree_grid, "accuracy")) |>
-  #  fit(xy_split[[i]])
   fits[["lasso"]][[i]] <- wf |>
     add_model(tune_spec) |>
-    finalize_workflow(select_best(lasso_grid, "accuracy")) |>
+    finalize_workflow(select_best(lasso_result$grid, "accuracy")) |>
     fit(split_funs[[i]](xy_split))
 }
 
@@ -187,7 +161,6 @@ coef_compare <- bind_rows(
 ) |>
   pivot_wider(names_from = split, values_from = estimate)
 
-library(ggrepel)
 ggplot(coef_compare, aes(`1`, `2`)) +
   geom_point() +
   geom_text_repel(data = filter(coef_compare, abs(`1`) + abs(`2`) > 0.4), aes(`1`, `2`, label = term), size = 6) +
@@ -198,3 +171,36 @@ ggplot(coef_compare, aes(`1`, `2`)) +
     title = element_text(size = 20)
   )
 ```
+
+Next approach to directly interpretability is to manually define predictive
+features.
+
+```{r}
+features <- samples |>
+  group_by(taxon, subject) |>
+  summarise(
+    slope = coef(fastLm(Freq ~ time))[1],
+    curvature = mean(diff(Freq, 2) ^ 2)
+  )
+
+xy_features <- samples |>
+  select(subject, class, taxon) |>
+  unique() |>
+  left_join(features) |>
+  pivot_wider(names_from = "taxon", values_from = c("slope", "curvature")) |>
+  select(-subject)
+
+lasso_outputs(tune_spec, xy_features)
+tree_outputs(tree_spec, xy_features)
+```
+
+This does quite a bit better than ordinary glmnet. Still a little ways away from
+transformers.
+
+```{r}
+# this one is cheating a little...
+nearest_neighbor(neighbors = 5) |>
+  set_mode("classification") |>
+  error_rate(xy_features)
+```
+

@@ -9,11 +9,12 @@ knitr::opts_chunk$set(warning = FALSE, message = FALSE)
 ```
 
 ```{r}
-library(tidyverse)
-library(tidymodels)
 library(RcppEigen)
+library(broom)
 library(glmnetUtils)
 library(glue)
+library(tidymodels)
+library(tidyverse)
 my_theme <- theme_classic() +
   theme()
 theme_set(my_theme)
@@ -86,4 +87,58 @@ decision_tree() |>
 nearest_neighbor(neighbors = 5) |>
   set_mode("classification") |>
   error_rate(xy_features)
+```
+
+```{r}
+problem_rec <- recipe(class ~ ., data = xy) |>
+  update_role(class, new_role = "outcome") |>
+  step_normalize(all_numeric())
+  
+wf <- workflow() |>
+  add_recipe(problem_rec)
+
+tune_spec <- logistic_reg(penalty = tune(), mixture = 1) |>
+  set_engine("glmnet")
+
+lasso_grid <- tune_grid(
+  wf |> add_model(tune_spec),
+  vfold_cv(xy, v = 4),
+  grid = grid_regular(penalty(range=c(-2.66610, -0.66610)), levels = 50)
+)
+
+p1 <- collect_metrics(lasso_grid) |>
+  filter(.metric == "accuracy") |>
+  ggplot(aes(log(penalty))) +
+  geom_errorbar(aes(
+    ymin = mean - std_err,
+    ymax = mean + std_err
+  ),
+  alpha = 0.5
+  ) +
+  geom_point(aes(y = mean), col = "#545454") +
+  scale_x_reverse() +
+  labs(x = expression(log(lambda)), y = "CV Accuracy") +
+  facet_wrap(~ .metric)
+
+final_lasso <- finalize_workflow(
+  add_model(wf, tune_spec),
+  select_best(lasso_grid, "accuracy")
+) |>
+  fit(xy)
+
+coefs <- tidy(final_lasso$fit$fit$fit)
+p2 <- ggplot(coefs) +
+  geom_hline(yintercept = 0, linewidth = 1.5) +
+  geom_line(aes(log(lambda), estimate, group = term), col = "#0c0c0c") +
+  labs(x = expression(log(lambda)), y = "Coefficient Estimate") +
+  scale_x_reverse()
+
+library(patchwork)
+
+p1 / p2
+
+tidy(final_lasso) |>
+  arrange(-estimate) |>
+  select(term, estimate)
+
 ```

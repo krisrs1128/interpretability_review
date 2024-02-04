@@ -1,0 +1,41 @@
+---
+title: "Linear Data Generation"
+output: rmdformats::readthedown
+---
+
+```{r}
+knitr::opts_chunk$set(warnings = FALSE, message = FALSE)
+```
+
+```{r}
+library(tidyverse)
+library(glue)
+```
+
+```{r}
+p_hat <- read_csv("../data/p_hat.csv")
+colnames(p_hat) <- c("index", "prob")
+
+p_hat |>
+  ggplot() +
+  geom_point(aes(index, prob))
+```
+```{r}
+blooms <- read_csv("../data/blooms.csv")
+p_hat <- p_hat |>
+  mutate(subject = glue("subject_{index + 1}"))
+
+class_data <- blooms |>
+  select(subject, class) |>
+  unique() |>
+  left_join(p_hat)
+
+ggplot(class_data) +
+  geom_histogram(aes(prob, fill = class), position = "identity", alpha = 0.8)
+```
+
+```{r}
+class_data |>
+  count(class, prob > 0)
+```
+

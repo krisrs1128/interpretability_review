@@ -32,13 +32,8 @@ error_rate <- function(spec, xy) {
 
 ```{r}
 samples <- read_csv("../data/blooms.csv") |>
-  select(class, subject, time, taxon, Freq) |>
   mutate(class = factor(class))
-```
-```{r}
-xy <- samples |>
-  pivot_wider(names_from = c("taxon", "time"), values_from = "Freq") |>
-  select(-subject)
+xy <- select(samples, -subject)
 ```
 
 First approach to directly interpretability is to manually define predictive

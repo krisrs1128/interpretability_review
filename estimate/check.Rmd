@@ -22,13 +22,9 @@ p_hat |>
 ```
 ```{r}
 blooms <- read_csv("../data/blooms.csv")
-p_hat <- p_hat |>
-  mutate(subject = glue("subject_{index + 1}"))
-
-class_data <- blooms |>
-  select(subject, class) |>
-  unique() |>
-  left_join(p_hat)
+class_data <- p_hat |>
+  mutate(subject = glue("subject_{index + 1}")) |>
+  left_join(select(blooms, subject, class))
 
 ggplot(class_data) +
   geom_histogram(aes(prob, fill = class), position = "identity", alpha = 0.8)
@@ -38,4 +34,3 @@ ggplot(class_data) +
 class_data |>
   count(class, prob > 0)
 ```
-

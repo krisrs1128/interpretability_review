@@ -44,7 +44,7 @@ class LitTransformer(L.LightningModule):
         super().__init__()
         self.model = model
 
-    def training_step(self, batch, index):
+    def training_step(self, batch):
         x, y = batch
         _, p_hat = self.model(x)
         loss = nn.functional.binary_cross_entropy_with_logits(p_hat, y)

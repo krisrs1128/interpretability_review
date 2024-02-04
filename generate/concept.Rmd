@@ -104,11 +104,11 @@ samples <- map_dfr(samples, ~ as_tibble(.) |> mutate(time = row_number()), .id =
   pivot_longer(starts_with("V"), names_to = "taxon") |>
   mutate(
     subject = glue("subject_{subject}"),
-    taxon = str_replace(taxon, "V", "tax_")
+    taxon = str_replace(taxon, "V", "tax")
   )
 
 samples |>
-  filter(taxon %in% glue("tax_{1:10}")) |>
+  filter(taxon %in% glue("tax{1:10}")) |>
   ggplot() +
   geom_line(aes(time, value, group = subject), linewidth = 0.2, alpha = 0.5) +
   facet_wrap(~ taxon)
@@ -135,7 +135,7 @@ merged_samples <- concept_weights |>
 
 merged_samples |>
   filter(
-    taxon %in% glue("tax_{1:14}"),
+    taxon %in% glue("tax{1:14}"),
     assignments %in% c(1:5, 20:24)
   ) |>
   ggplot() +
@@ -149,6 +149,15 @@ merged_samples |>
   rename(Freq = value) |>
   pivot_wider(names_from = c("taxon", "time"), values_from = "Freq") |>
   write_csv("../data/blooms.csv")
+```
+
+```{r}
+concept_weights |>
+  select(subject, concept, weight) |>
+  unique() |>
+  mutate(weight = 1 * (weight > 0.05)) |>
+  pivot_wider(names_from = "concept", values_from = "weight") |>
+  write_csv("../data/concepts.csv")
 ```
 
 ```{r}

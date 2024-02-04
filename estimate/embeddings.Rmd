@@ -75,8 +75,34 @@ pca_taxon_z <- embeddings |>
   rspca(k = 2, alpha = alpha, beta = beta)
   
 bind_cols(class = classes, pca_taxon_z$scores) |>
+  mutate(id = row_number()) |>
   ggplot() +
-  geom_point(aes(`...2`, `...3`, col = class))
+  #geom_point(aes(`...2`, `...3`, col = class)) +
+  geom_text(aes(`...2`, `...3`, col = class, label = id))
+```
+
+```{r}
+endpoints <- embeddings |>
+  mutate(id = row_number()) |>
+  filter(id %in% c(305, 470)) |>
+  select(starts_with("tax75"))
+
+interpolations <- list()
+lambdas <- seq(0, 1, length.out = 100)
+for (i in seq_along(lambdas)) {
+  interpolations[[i]] <- lambdas[i] * endpoints[1, ] + (1 - lambdas[i]) * endpoints[2, ]
+}
+
+interpolations <- bind_rows(interpolations)
+
+# now find the closest points to these interpolations
+embeddings_subset <- embeddings |>
+  select(starts_with("tax75"))
+
+D <- dist(rbind(interpolations, embeddings_subset), "manhattan") |>
+  as.matrix()
+
+unique(apply(D[1:100, 101:ncol(D)], 1, which.min))
 ```
 
 

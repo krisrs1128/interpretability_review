@@ -86,7 +86,7 @@ concept_weights <- rdirichlet(n_samples, rep(1, n_concepts))
 concepts <- list()
 for (k in seq_len(n_concepts)) {
   cur_taxa <- sample(n_taxa, n_taxa * 0.3)
-  x <- matrix(0, n_timepoints, n_taxa)
+  x <- matrix(runif(n_timepoints * n_taxa, 0, 0.05), n_timepoints, n_taxa)
   f <- sample(c(rbloom, rincrease, rdecrease), 1)
   x[, cur_taxa] <- sapply(seq_along(cur_taxa), \(i) f[[1]]())
   concepts[[k]] <- x
@@ -147,6 +147,7 @@ merged_samples |>
 merged_samples |>
   select(subject, taxon, time, value, class) |>
   rename(Freq = value) |>
+  pivot_wider(names_from = c("taxon", "time"), values_from = "Freq") |>
   write_csv("../data/blooms.csv")
 ```
 

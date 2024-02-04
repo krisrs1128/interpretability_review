@@ -5,9 +5,13 @@ output: rmdformats::readthedown
 
 ```{r}
 library(glue)
+library(patchwork)
 library(sparsepca)
 library(tidyverse)
 set.seed(20240203)
+my_theme <- theme_classic() +
+  theme()
+theme_set(my_theme)
 ```
 
 ```{r}
@@ -20,18 +24,23 @@ feature_names <- apply(expand.grid(glue("tax{1:n_taxa}"), glue("t{1:n_timepoints
 embeddings <- read_csv("../data/embeddings.csv", col_names = FALSE) |>
   set_names(feature_names)
 blooms <- read_csv("../data/blooms.csv")
-
-classes <- blooms |>
-  select(subject, class) |>
-  unique() |>
-  pull(class)
+classes <- pull(blooms, class)
 ```
 
 ```{r}
-pca_res = rspca(embeddings, k = 2, alpha = alpha, beta = beta)
-bind_cols(class = classes, pca_res$scores) |>
+pca_res <- rspca(embeddings, k = 2, alpha = alpha, beta = beta)
+p1 <- bind_cols(class = classes, pca_res$scores) |>
   ggplot() +
-  geom_point(aes(`...2`, `...3`, col = class))
+  geom_point(aes(`...2`, `...3`, col = class)) +
+  scale_color_manual(values = c("#730739", "#4BA68C")) +
+  labs(x = "PC1: [34.7%]", y = "PC2: [27.9%]", col = "Class", title = "PCA of Embeddings") +
+  theme(
+    title = element_text(size = 16),
+    axis.title = element_text(size = 16),
+    legend.title = element_text(size = 16),
+    axis.text = element_text(size = 14),
+    legend.text = element_text(size = 14)
+  )
 ```
 
 ```{r}
@@ -39,9 +48,21 @@ pca_original <- blooms |>
   select(-subject:-class) |>
   rspca(k = 2, alpha = alpha, beta = beta)
 
-bind_cols(class = classes, pca_original$scores) |>
+p2 <- bind_cols(class = classes, pca_original$scores) |>
   ggplot() +
-  geom_point(aes(`...2`, `...3`, col = class))
+  geom_point(aes(`...2`, `...3`, col = class)) +
+  scale_color_manual(values = c("#730739", "#4BA68C")) +
+  labs(x = "PC1: [2.6%]", y = "PC2: [2.00%]", col = "Class", title = "PCA of Original Data") +
+  theme(
+    title = element_text(size = 16),
+    axis.title = element_text(size = 16),
+    legend.title = element_text(size = 16),
+    axis.text = element_text(size = 14),
+    legend.text = element_text(size = 14)
+  )
+
+p2 + p1 +
+  plot_layout(guides = "collect")
 ```
 
 ```{r}

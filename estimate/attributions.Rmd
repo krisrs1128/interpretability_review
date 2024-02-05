@@ -19,7 +19,7 @@ set.seed(20240203)
 ```{r}
 n_taxa <- 144
 n_timepoints <- 50
-tax_id <- "tax128"
+tax_id <- "tax21"
 
 feature_names <- apply(expand.grid(glue("tax{1:n_taxa}"), as.character(1:n_timepoints)), 1, paste, collapse = "_")
 attributions <- read_csv("../data/attributions.csv") |>
@@ -65,7 +65,7 @@ attr75 <- attributions |>
 
 
 ```{r}
-subset_str <- glue("subject_{tail(hclust_res$order, 8)}")
+subset_str <- glue("subject_{hclust_res$order[25:30]}")
 blooms |>
   filter(subject %in% subset_str) |>
   select(subject, class, starts_with(tax_id)) |>
@@ -73,11 +73,17 @@ blooms |>
   left_join(attr75) |>
   mutate(subject = factor(subject, subset_str)) |>
   ggplot(aes(time, Freq)) +
-  geom_line(aes(group = subject), col = "#0c0c0c") +
-  geom_point(aes(size = abs(attribution), col = attribution)) +
-  scale_color_gradient2(mid = "#d3d3d3") +
-  scale_size_area(max_size = 4) +
-  facet_grid(class + subject ~ ., scales = "free_y") +
+  geom_line(aes(group = subject, col = class), linewidth = 0.9) +
+  scale_color_manual(values = c("#730739", "#4BA68C"))  +
+  geom_point(aes(size = abs(attribution), shape = attribution > 0)) +
+  scale_size_area(max_size = 14) +
+  scale_shape_manual(values = c(95, 43)) +
+  facet_wrap(~ subject, scales = "free_y") +
+  labs(x = "Time", y = "Abundance", title = "Integrated Gradients for Species 21") +
+  guides(
+    size = guide_legend(override.aes = list(size = 2)),
+    shape = guide_legend(override.aes = list(size = 4))
+  ) +
   theme(strip.text.y = element_text(angle = 0))
 ```
 

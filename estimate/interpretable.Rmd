@@ -78,7 +78,7 @@ tree_outputs <- function(tree_spec, xy) {
     control = control
   )
 
-  collect_metrics(tree_grid) |>
+  metrics_plot <- collect_metrics(tree_grid) |>
     filter(.metric == "accuracy") |>
     ggplot(aes(log(cost_complexity))) +
     geom_errorbar(aes(
@@ -100,7 +100,7 @@ tree_outputs <- function(tree_spec, xy) {
   final_tree <- fit_best(tree_grid, metric = "accuracy")
   extract_fit_engine(final_tree) |>
     rpart.plot()
-  list(fit = final_tree, grid = tree_grid)
+  list(fit = final_tree, grid = tree_grid, plot = metrics_plot)
 }
 
 ```
@@ -176,22 +176,54 @@ Next approach to directly interpretability is to manually define predictive
 features.
 
 ```{r}
-features <- samples |>
+samples_long <- samples |>
+  pivot_longer(starts_with("tax"), names_to = "feature", values_to = "Freq") |>
+  mutate(
+    taxon = str_extract(feature, "tax[0-9]+"),
+    time = as.integer(str_extract(feature, "[0-9]+$"))
+    )
+  
+features <- samples_long |>
   group_by(taxon, subject) |>
   summarise(
     slope = coef(fastLm(Freq ~ time))[1],
     curvature = mean(diff(Freq, 2) ^ 2)
   )
 
-xy_features <- samples |>
+xy_features <- samples_long |>
   select(subject, class, taxon) |>
   unique() |>
   left_join(features) |>
   pivot_wider(names_from = "taxon", values_from = c("slope", "curvature")) |>
   select(-subject)
+```
 
-lasso_outputs(tune_spec, xy_features)
-tree_outputs(tree_spec, xy_features)
+```{r}
+problem_rec <- recipe(class ~ ., data = xy_features) |>
+  update_role(class, new_role = "outcome") |>
+  step_normalize(all_numeric())
+
+wf <- workflow() |>
+  add_recipe(problem_rec)
+
+tune_spec <- logistic_reg(penalty = tune(), mixture = 1) |>
+  set_engine("glmnet")
+tree_spec <- decision_tree(cost_complexity = tune()) |>
+  set_engine("rpart") |>
+  set_mode("classification")
+
+lasso_result <- lasso_outputs(tune_spec, xy_features)
+lasso_result$fit |>
+  extract_fit_parsnip() |>
+  tidy() |>
+  summarise(sum(estimate != 0))
+
+tree_result <- tree_outputs(tree_spec, xy_features)
+tree_result$grid |>
+  collect_metrics() |>
+  filter(.metric == "accuracy") |>
+  summarise(max(mean))
+tree_result$plot
 ```
 
 This does quite a bit better than ordinary glmnet. Still a little ways away from

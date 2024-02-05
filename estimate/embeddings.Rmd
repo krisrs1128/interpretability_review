@@ -66,14 +66,26 @@ p2 + p1 +
 ```
 
 ```{r}
-tax_id <- "tax75"
-blooms |>
+tax_id <- "tax21"
+p1 <- blooms |>
   select(subject, class, starts_with(tax_id)) |>
+  sample_n(100) |>
   pivot_longer(starts_with(tax_id), values_to = "Freq") |>
   mutate(time = as.integer(str_extract(name, "[0-9]+$"))) |>
   ggplot() +
-  geom_line(aes(time, Freq, group = subject, col = class), alpha = 0.7, linewidth = 0.2) +
-  facet_grid(class ~ .)
+  geom_line(aes(time, Freq, group = subject, col = class), alpha = 0.9, linewidth = 0.8) +
+  scale_color_manual(values = c("#730739", "#4BA68C")) +
+  scale_x_continuous(expand = c(0, 0)) +
+  scale_y_continuous(expand = c(0, 0)) +
+  guides(col = guide_legend(override.aes = list(linewidth = 2, alpha = 1))) +
+  labs(x = "Time", y = "Abundance", title ="Species 21") +
+  facet_grid(class ~ .) +
+  theme(
+    strip.text = element_text(size = 16),
+    axis.title = element_text(size = 18),
+    title = element_text(size = 18),
+    legend.position = "none"
+  )
 ```
 
 ```{r}
@@ -84,23 +96,30 @@ pca_taxon <- blooms |>
   
 bind_cols(class = classes, pca_taxon$scores) |>
   ggplot() +
-  geom_point(aes(`...2`, `...3`, col = class))
+  geom_text(aes(`...2`, `...3`, col = class, label = id)) +
+  labs(x = "PC1 [52.6% Variance]", y = "PC2 [24.5% Variance]", title = "PCA of Source Data [Species 21]") +
+  scale_color_manual(values = c("#730739", "#4BA68C"))
 
 pca_taxon_z <- embeddings |>
   select(starts_with(tax_id)) |>
   rspca(k = 2, alpha = alpha, beta = beta)
   
-bind_cols(class = classes, pca_taxon_z$scores) |>
-  mutate(id = row_number()) |>
+p2 <- bind_cols(class = classes, pca_taxon_z$scores) |>
   ggplot() +
-  #geom_point(aes(`...2`, `...3`, col = class)) +
-  geom_text(aes(`...2`, `...3`, col = class, label = id))
+  geom_point(aes(`...2`, `...3`, col = class)) +
+  labs(x = "PC1 [49.3% Variance]", y = "PC2 [15.6% variance]", title = "PCA of Embeddings [Species 21]") +
+  scale_color_manual(values = c("#730739", "#4BA68C"))  +
+  theme(legend.position = "null")
+
+p1 + p2 +
+  plot_layout(width = c(2, 1), guides = "collect")
 ```
 
 ```{r}
 endpoints <- embeddings |>
   mutate(id = row_number()) |>
-  filter(id %in% c(292, 458)) |> # 284 -> 218 in tax128 also interesting
+  #filter(id %in% c(292, 458)) |> # 284 -> 218 in tax128 also interesting
+  filter(id %in% c(443, 71)) |> # 284 -> 218 in tax128 also interesting
   select(starts_with(tax_id))
 
 interpolations <- list()
@@ -122,15 +141,31 @@ intermediates <- unique(apply(D[1:100, 101:ncol(D)], 1, which.min))
 ```
 
 ```{r}
-blooms[intermediates, ] |>
+highlight_data <- bind_cols(class = classes, pca_taxon_z$scores) |>
+  mutate(highlight = row_number() %in% intermediates, id = row_number())
+
+library(ggrepel)
+p2 <- ggplot(highlight_data, aes(`...2`, `...3`, col = class)) +
+  geom_point(aes(col = class, alpha = highlight, size = highlight)) +
+  geom_text_repel(data = filter(highlight_data, highlight), aes(label = id), nudge_x = -1.5) +
+  labs(x = "PC1 [49.3% Variance]", y = "PC2 [15.6% variance]", title = "PCA of Embeddings [Species 21]") +
+  scale_color_manual(values = c("#730739", "#4BA68C"))  +
+  theme(legend.position = "null")
+
+p1 <- blooms[intermediates, ] |>
   select(subject, class, starts_with(tax_id)) |>
-  mutate(
-    index = factor(intermediates, levels = intermediates)) |>
+  mutate(index = factor(intermediates, levels = intermediates)) |>
   pivot_longer(starts_with("tax")) |>
   mutate(time = as.integer(str_extract(name, "[0-9]+$"))) |>
   ggplot() +
-  geom_line(aes(time, value, group = subject, col = class)) +
-  facet_wrap(index ~ .)
+  geom_line(aes(time, value, group = subject, col = class), linewidth = 0.9) +
+  scale_color_manual(values = c("#730739", "#4BA68C"))  +
+  facet_wrap(index ~ ., nrow = 3) +
+  labs(x = "Time", y = "Value", title = "Interpolation Nearest Neighbors") +
+  theme(legend.position = "none")
+
+(p1 + p2) +
+  plot_layout(guides = "collect", widths = c(2, 1))
 ```
 
 Which taxa would be interesting to visualize?

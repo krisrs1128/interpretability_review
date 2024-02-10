@@ -11,6 +11,7 @@ knitr::opts_chunk$set(echo = TRUE)
 ```{r}
 library(tidyverse)
 library(tidymodels)
+library(rpart.plot)
 library(glue)
 my_theme <- theme_classic() +
   theme()
@@ -34,7 +35,7 @@ xy <- samples |>
 
 ```{r}
 problem_rec <- recipe(prob ~ ., data = select(xy, -class)) |>
-  update_role(class, new_role = "outcome") |>
+  update_role(prob, new_role = "outcome") |>
   step_normalize(all_numeric())
 
 wf <- workflow() |>
@@ -42,9 +43,9 @@ wf <- workflow() |>
 
 tree_spec <- decision_tree(cost_complexity = tune()) |>
   set_engine("rpart") |>
-  set_mode("classification")
+  set_mode("regression")
 
-tree_outputs(tree_spec, wf, select(xy, -class))
+tree_outputs(tree_spec, wf, select(xy, -class), "rmse")
 ```
 
 ```{r}
@@ -53,6 +54,9 @@ problem_rec <- recipe(class ~ ., data = select(xy, -prob)) |>
   step_normalize(all_numeric())
 wf <- workflow() |>
   add_recipe(problem_rec)
+tree_spec <- decision_tree(cost_complexity = tune()) |>
+  set_engine("rpart") |>
+  set_mode("classification")
 
 tree_outputs(tree_spec, wf, select(xy, -prob))
 ```

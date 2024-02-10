@@ -5,6 +5,7 @@ output: rmdformats::readthedown
 
 ```{r}
 library(glue)
+library(ggrepel)
 library(patchwork)
 library(sparsepca)
 library(tidyverse)
@@ -24,14 +25,16 @@ feature_names <- apply(expand.grid(glue("tax{1:n_taxa}"), glue("t{1:n_timepoints
 embeddings <- read_csv("../data/embeddings.csv", col_names = FALSE) |>
   set_names(feature_names)
 blooms <- read_csv("../data/blooms.csv")
-classes <- pull(blooms, class)
+classes <- blooms |>
+  select(class) |>
+  mutate(id = row_number())
 ```
 
 ```{r}
 pca_res <- rspca(embeddings, k = 2, alpha = alpha, beta = beta)
 p1 <- bind_cols(class = classes, pca_res$scores) |>
   ggplot() +
-  geom_point(aes(`...2`, `...3`, col = class)) +
+  geom_point(aes(`...3`, `...4`, col = class)) +
   scale_color_manual(values = c("#730739", "#4BA68C")) +
   labs(x = "PC1: [34.7%]", y = "PC2: [27.9%]", col = "Class", title = "PCA of Embeddings") +
   theme(
@@ -50,7 +53,7 @@ pca_original <- blooms |>
 
 p2 <- bind_cols(class = classes, pca_original$scores) |>
   ggplot() +
-  geom_point(aes(`...2`, `...3`, col = class)) +
+  geom_point(aes(`...3`, `...4`, col = class)) +
   scale_color_manual(values = c("#730739", "#4BA68C")) +
   labs(x = "PC1: [2.6%]", y = "PC2: [2.00%]", col = "Class", title = "PCA of Original Data") +
   theme(
@@ -96,7 +99,7 @@ pca_taxon <- blooms |>
   
 bind_cols(class = classes, pca_taxon$scores) |>
   ggplot() +
-  geom_text(aes(`...2`, `...3`, col = class, label = id)) +
+  geom_text(aes(`...3`, `...4`, col = class, label = id)) +
   labs(x = "PC1 [52.6% Variance]", y = "PC2 [24.5% Variance]", title = "PCA of Source Data [Species 21]") +
   scale_color_manual(values = c("#730739", "#4BA68C"))
 
@@ -106,7 +109,7 @@ pca_taxon_z <- embeddings |>
   
 p2 <- bind_cols(class = classes, pca_taxon_z$scores) |>
   ggplot() +
-  geom_point(aes(`...2`, `...3`, col = class)) +
+  geom_point(aes(`...3`, `...4`, col = class)) +
   labs(x = "PC1 [49.3% Variance]", y = "PC2 [15.6% variance]", title = "PCA of Embeddings [Species 21]") +
   scale_color_manual(values = c("#730739", "#4BA68C"))  +
   theme(legend.position = "null")
@@ -144,8 +147,7 @@ intermediates <- unique(apply(D[1:100, 101:ncol(D)], 1, which.min))
 highlight_data <- bind_cols(class = classes, pca_taxon_z$scores) |>
   mutate(highlight = row_number() %in% intermediates, id = row_number())
 
-library(ggrepel)
-p2 <- ggplot(highlight_data, aes(`...2`, `...3`, col = class)) +
+p2 <- ggplot(highlight_data, aes(`...3`, `...4`, col = class)) +
   geom_point(aes(col = class, alpha = highlight, size = highlight)) +
   geom_text_repel(data = filter(highlight_data, highlight), aes(label = id), nudge_x = -1.5) +
   labs(x = "PC1 [49.3% Variance]", y = "PC2 [15.6% variance]", title = "PCA of Embeddings [Species 21]") +

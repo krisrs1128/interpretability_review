@@ -30,7 +30,7 @@ class ConceptData(Dataset):
 
 
 class ConceptBottleneck(nn.Module):
-  def __init__(self, n_embd=144, n_positions=50, n_layer=5, n_concept=25, n_class=2):
+  def __init__(self, n_embd=144, n_positions=50, n_layer=6, n_concept=25, n_class=2):
     super(ConceptBottleneck, self).__init__()
     self.n_concept = n_concept
     self.n_class = n_class
@@ -55,10 +55,11 @@ class ConceptBottleneck(nn.Module):
 
 # define the LightningModule
 class LitConcept(L.LightningModule):
-    def __init__(self, model, concept_hyper=0.1):
+    def __init__(self, model, concept_hyper=.5):
         super().__init__()
         self.model = model
         self.concept_hyper = concept_hyper
+        self.acc = lambda y, p: ((y == 1) * (p > 0.5)).sum().item() + ((y == 0) * (p <= 0.5)).sum().item()
 
     def training_step(self, batch):
         x, c, y = batch
@@ -67,8 +68,16 @@ class LitConcept(L.LightningModule):
         y_loss = nn.functional.binary_cross_entropy_with_logits(y_hat, y)
         self.log("concept_loss", c_loss, on_epoch=True)
         self.log("task_loss", y_loss, on_epoch=True)
+        self.log("train_acc", self.acc(y, y_hat), on_epoch=True, reduce_fx=sum)
         return c_loss + self.concept_hyper * y_loss
 
+    def validation_step(self, batch):
+        x, c, y = batch
+        _, y_hat = self.model(x)
+        loss = nn.functional.binary_cross_entropy_with_logits(y_hat, y)
+        self.log("validation_loss", loss, on_epoch=True)
+        self.log("validation_acc", self.acc(y, y_hat), on_epoch=True, reduce_fx=sum)
+
     def configure_optimizers(self):
-        optimizer = optim.Adam(self.parameters(), lr=1e-3)
+        optimizer = optim.Adam(self.parameters(), lr=5e-5)
         return optimizer

@@ -27,7 +27,7 @@ class LinearData(Dataset):
 
 
 class Transformer(nn.Module):
-  def __init__(self, n_embd=144, n_positions=50, n_layer=5, n_class=2):
+  def __init__(self, n_embd=144, n_positions=50, n_layer=6, n_class=2):
     super(Transformer, self).__init__()
     config = GPT2Config(n_embd=n_embd, n_positions=n_positions, n_layer=n_layer)
     self.backbone = GPT2Model(config)
@@ -43,15 +43,23 @@ class LitTransformer(L.LightningModule):
     def __init__(self, model):
         super().__init__()
         self.model = model
+        self.acc = lambda y, p: ((y == 1) * (p > 0.5)).sum().item() + ((y == 0) * (p <= 0.5)).sum().item()
 
     def training_step(self, batch):
         x, y = batch
         _, p_hat = self.model(x)
         loss = nn.functional.binary_cross_entropy_with_logits(p_hat, y)
         self.log("train_loss", loss, on_epoch=True)
+        self.log("train_acc", self.acc(y, p_hat), on_epoch=True, reduce_fx=sum)
         return loss
 
-    def configure_optimizers(self):
-        optimizer = optim.Adam(self.parameters(), lr=1e-3)
-        return optimizer
+    def validation_step(self, batch):
+        x, y = batch
+        _, p_hat = self.model(x)
+        loss = nn.functional.binary_cross_entropy_with_logits(p_hat, y)
+        self.log("validation_loss", loss, on_epoch=True)
+        self.log("validation_acc", self.acc(y, p_hat), on_epoch=True, reduce_fx=sum)
 
+    def configure_optimizers(self):
+        optimizer = optim.Adam(self.parameters(), lr=5e-5)
+        return optimizer

@@ -16,6 +16,7 @@ my_theme <- theme_classic() +
   theme()
 theme_set(my_theme)
 set.seed(20240201)
+source("interpretable.R")
 ```
 
 ```{r}
@@ -28,27 +29,30 @@ p_hat <- p_hat |>
 
 xy <- samples |>
   left_join(p_hat) |>
-  select(-subject:-class)
+  select(-subject, -index)
 ```
 
 ```{r}
-p_hat <- decision_tree() |>
-  set_mode("regression") |>
-  fit(prob ~ ., data = xy) |>
-  predict(xy)
+problem_rec <- recipe(prob ~ ., data = select(xy, -class)) |>
+  update_role(class, new_role = "outcome") |>
+  step_normalize(all_numeric())
 
-bind_cols(class = samples$class, p_hat) |>
-  count(class, .pred > 0)
+wf <- workflow() |>
+  add_recipe(problem_rec)
+
+tree_spec <- decision_tree(cost_complexity = tune()) |>
+  set_engine("rpart") |>
+  set_mode("classification")
+
+tree_outputs(tree_spec, wf, select(xy, -class))
 ```
 
 ```{r}
-xy <- select(samples, -subject)
-y_hat <- decision_tree() |>
-  set_mode("classification") |>
-  fit(class ~ ., data = xy) |>
-  predict(xy)
+problem_rec <- recipe(class ~ ., data = select(xy, -prob)) |>
+  update_role(class, new_role = "outcome") |>
+  step_normalize(all_numeric())
+wf <- workflow() |>
+  add_recipe(problem_rec)
 
-bind_cols(class = samples$class, y_hat) |>
-  count(class, .pred_class)
+tree_outputs(tree_spec, wf, select(xy, -prob))
 ```
-

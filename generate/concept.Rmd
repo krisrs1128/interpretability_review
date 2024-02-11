@@ -1,4 +1,4 @@
----
+----
 title: "concept_generation"
 output: html_document
 date: "`r Sys.Date()`"
@@ -9,12 +9,14 @@ knitr::opts_chunk$set(warning = FALSE, message = FALSE)
 ```
 
 ```{r}
-library(ranger)
-library(glmnetUtils)
-library(gsignal)
-library(tidyverse)
 library(LaplacesDemon)
+library(glmnetUtils)
 library(glue)
+library(gsignal)
+library(patchwork)
+library(ranger)
+library(scico)
+library(tidyverse)
 my_theme <- theme_classic() +
   theme()
 theme_set(my_theme)
@@ -57,20 +59,40 @@ plot_trajectory <- function(ys) {
   as_tibble(ys) |>
     mutate(time = row_number()) |>
     pivot_longer(-time) |>
+    mutate(name = str_remove(name, "V")) |>
     ggplot() +
-    geom_point(aes(time, value)) +
-    facet_wrap(~ name)
+    geom_line(aes(time, value), linewidth = 1.2) +
+    facet_wrap(~ reorder(name, value), ncol = 5)
 }
 
 subcommunities <- function(n_sub = 5, n_taxa = 50, alpha = 0.9) {
   rdirichlet(n_sub, rep(alpha, n_taxa))
 }
 
-sapply(1:10, \(i) rbloom()) |>
-  plot_trajectory()
-sapply(1:10, \(i) rdecrease()) |>
-  plot_trajectory()
-heatmap(subcommunities())
+p <- list()
+p[["bloom"]] <- sapply(1:10, \(i) rbloom()) |>
+  plot_trajectory() +
+  labs(title = "(a) Pure Blooms")
+p[["decreases"]] <- sapply(1:10, \(i) rdecrease()) |>
+  plot_trajectory() +
+  labs(title = "(b) Pure Decreasing Trajectories")
+
+x <- subcommunities()
+p[["subcommunities"]] <- as.data.frame(x) |>
+  mutate(Factor = row_number()) |>
+  pivot_longer(-Factor, names_to = "Sample") |>
+  mutate(
+    Sample = str_remove(Sample, "V"),
+    Sample = factor(Sample, levels = hclust(dist(t(x)))$order),
+    Factor = factor(Factor, levels = hclust(dist(x))$order)
+  ) |>
+  ggplot() +
+    geom_tile(aes(Sample, Factor, fill = value, col = value)) +
+    scale_x_discrete(expand = c(0, 0)) +
+    scale_y_discrete(expand = c(0, 0)) +
+    scale_fill_scico(palette = "berlin", midpoint = 0.06) +
+    scale_color_scico(palette = "berlin", midpoint = 0.06) +
+    labs(title = c("(c) Factor Contributions"))
 ```
 
 ```{r}
@@ -133,7 +155,7 @@ merged_samples <- concept_weights |>
   unique() |>
   left_join(samples)
 
-merged_samples |>
+p[["samples"]] <- merged_samples |>
   filter(
     taxon %in% glue("tax{1:10}"),
     subject %in% glue("subject_{40:55}")
@@ -152,7 +174,8 @@ merged_samples |>
     strip.text = element_text(size = 14),
     legend.title = element_text(size = 16),
     legend.text = element_text(size = 14)
-  )
+  ) +
+  labs(title = c("(d) Simulated Trajectories"))
 ```
 
 ```{r}
@@ -160,7 +183,7 @@ merged_samples |>
   select(subject, taxon, time, value, class) |>
   rename(Freq = value) |>
   pivot_wider(names_from = c("taxon", "time"), values_from = "Freq") |>
-  write_csv("../data/blooms.csv")
+  write_csv("data/blooms.csv")
 ```
 
 ```{r}
@@ -169,7 +192,7 @@ concept_weights |>
   unique() |>
   mutate(weight = 1 * (weight > 0.05)) |>
   pivot_wider(names_from = "concept", values_from = "weight") |>
-  write_csv("../data/concepts.csv")
+  write_csv("data/concepts.csv")
 ```
 
 ```{r}
@@ -186,4 +209,12 @@ fit_glm <- cv.glmnet(class ~ ., xy, family = "binomial")
 y_hat <- predict(fit_glm, xy)
 data.frame(y = xy$class, y_hat = ifelse(y_hat[, 1] > 0, "healthy", "disease")) |>
   count(y, y_hat)
+```
+
+```{r}
+(p[["bloom"]] + p[["decreases"]]) / 
+  p[["subcommunities"]] /
+  p[["samples"]] +
+  plot_layout(heights = c(1, 1, 1.5))
+ggsave("data/example_trajectories.png", width = 12, height = 8)
 ```

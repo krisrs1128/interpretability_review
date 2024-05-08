@@ -22,9 +22,9 @@ alpha <- 5e-3
 beta <- 1e-2
 feature_names <- apply(expand.grid(glue("tax{1:n_taxa}"), glue("t{1:n_timepoints}")), 1, paste, collapse = "_")
 
-embeddings <- read_csv("../data/embeddings.csv", col_names = FALSE) |>
+embeddings <- read_csv("data/embeddings.csv", col_names = FALSE) |>
   set_names(feature_names)
-blooms <- read_csv("../data/blooms.csv")
+blooms <- read_csv("data/blooms.csv")
 classes <- blooms |>
   select(class) |>
   mutate(id = row_number())
@@ -52,6 +52,7 @@ pca_original <- blooms |>
   rspca(k = 2, alpha = alpha, beta = beta)
 
 p2 <- bind_cols(class = classes, pca_original$scores) |>
+  mutate(id = row_number()) |>
   ggplot() +
   geom_point(aes(`...3`, `...4`, col = class)) +
   scale_color_manual(values = c("#730739", "#4BA68C")) +
@@ -121,12 +122,13 @@ p1 + p2 +
 ```{r}
 endpoints <- embeddings |>
   mutate(id = row_number()) |>
-  #filter(id %in% c(292, 458)) |> # 284 -> 218 in tax128 also interesting
-  filter(id %in% c(443, 71)) |> # 284 -> 218 in tax128 also interesting
+  #filter(id %in% c(110, 296)) |> # 284 -> 218 in tax128 also interesting
+  #filter(id %in% c(233, 15)) |> # 284 -> 218 in tax128 also interesting
+  filter(id %in% c(111, 212)) |>
   select(starts_with(tax_id))
 
 interpolations <- list()
-lambdas <- seq(0, 1, length.out = 100)
+lambdas <- seq(0, 1, length.out = 120)
 for (i in seq_along(lambdas)) {
   interpolations[[i]] <- lambdas[i] * endpoints[1, ] + (1 - lambdas[i]) * endpoints[2, ]
 }
@@ -140,10 +142,8 @@ embeddings_subset <- embeddings |>
 D <- dist(rbind(interpolations, embeddings_subset), "manhattan") |>
   as.matrix()
 
-intermediates <- unique(apply(D[1:100, 101:ncol(D)], 1, which.min))
-```
+intermediates <- unique(apply(D[1:120, 121:ncol(D)], 1, which.min))
 
-```{r}
 highlight_data <- bind_cols(class = classes, pca_taxon_z$scores) |>
   mutate(highlight = row_number() %in% intermediates, id = row_number())
 
@@ -152,6 +152,7 @@ p2 <- ggplot(highlight_data, aes(`...3`, `...4`, col = class)) +
   geom_text_repel(data = filter(highlight_data, highlight), aes(label = id), nudge_x = -1.5) +
   labs(x = "PC1 [49.3% Variance]", y = "PC2 [15.6% variance]", title = "PCA of Embeddings [Species 21]") +
   scale_color_manual(values = c("#730739", "#4BA68C"))  +
+  scale_size_manual(values = c(1.5, 4)) +
   theme(legend.position = "null")
 
 p1 <- blooms[intermediates, ] |>
@@ -162,12 +163,13 @@ p1 <- blooms[intermediates, ] |>
   ggplot() +
   geom_line(aes(time, value, group = subject, col = class), linewidth = 0.9) +
   scale_color_manual(values = c("#730739", "#4BA68C"))  +
-  facet_wrap(index ~ ., nrow = 3) +
+  facet_wrap(index ~ ., nrow = 2) +
   labs(x = "Time", y = "Value", title = "Interpolation Nearest Neighbors") +
   theme(legend.position = "none")
 
 (p1 + p2) +
   plot_layout(guides = "collect", widths = c(2, 1))
+ggsave("data/species_interpolation.png", width = 12, height = 4)
 ```
 
 Which taxa would be interesting to visualize?

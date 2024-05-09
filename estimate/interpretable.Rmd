@@ -45,20 +45,11 @@ tidy(lasso_result$fit) |>
   arrange(-estimate) |>
   select(term, estimate)
 lasso_result$plot
+lasso_result$errors
 
 collect_metrics(lasso_result$grid) |>
   filter(.metric == "accuracy") |>
   arrange(-mean)
-```
-
-```{r}
-x <- scale(select(xy, -class))
-y <- ifelse(xy$class == "healthy", 1, 0)
-in_sample <- glmnet(x, y, family = "binomial", lambda = 0.00216)
-y_hat <- predict(in_sample, x, type = "response") > 0.5
-
-err <- table(y, y_hat)
-sum(diag(err) / nrow(x))
 ```
 
 Here is the analogous code for a decision tree.
@@ -69,6 +60,7 @@ tree_spec <- decision_tree(cost_complexity = tune()) |>
   set_mode("classification")
 
 final_tree <- tree_outputs(tree_spec, wf, xy)
+final_tree
 ```
 
 Next approach to directly interpretability is to manually define predictive
@@ -86,7 +78,7 @@ features <- samples_long |>
   group_by(taxon, subject) |>
   summarise(
     slope = coef(fastLm(Freq ~ time))[1],
-    curvature = mean(diff(Freq, 2) ^ 2)
+    curvature = mean(diff(Freq, 2)^2)
   )
 
 xy_features <- samples_long |>

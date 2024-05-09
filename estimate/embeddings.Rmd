@@ -87,7 +87,7 @@ pca_taxon <- blooms |>
   select(subject, class, starts_with(tax_id)) |>
   select(!any_of(c("subject", "taxon", "class"))) |>
   rspca(k = 2, alpha = alpha, beta = beta)
-  
+
 bind_cols(class = classes, pca_taxon$scores) |>
   ggplot() +
   geom_text(aes(`...3`, `...4`, col = class, label = id)) +
@@ -98,12 +98,12 @@ pca_taxon_z <- embeddings |>
   select(starts_with(tax_id)) |>
   rspca(k = 2, alpha = alpha, beta = beta)
 eig <- round(100 * pca_taxon_z$eigenvalues / sum(pca_taxon_z$eigenvalues), 2)
-  
+
 p2 <- bind_cols(class = classes, pca_taxon_z$scores) |>
   ggplot() +
   geom_point(aes(`...3`, `...4`, col = class)) +
   labs(x = glue("PC1 [{eig[1]}% Variance]"), y = glue("PC2 [{eig[2]}% variance]"), title = "PCA of Embeddings [Species 21]") +
-  scale_color_manual(values = c("#730739", "#4BA68C")) 
+  scale_color_manual(values = c("#730739", "#4BA68C"))
 ```
 
 ```{r}
@@ -134,7 +134,7 @@ p[["pc_z"]] <- ggplot(highlight_data, aes(`...3`, `...4`, col = class)) +
   geom_point(aes(col = class, alpha = highlight, size = highlight)) +
   geom_label_repel(data = filter(highlight_data, highlight), aes(label = id), nudge_x = -1.5) +
   labs(x = glue("PC1 [{eig[1]}% Variance]"), y = glue("PC2 [{eig[2]}% variance]"), title = "(d) Interpolation") +
-  scale_color_manual(values = c("#730739", "#4BA68C"))  +
+  scale_color_manual(values = c("#730739", "#4BA68C")) +
   scale_alpha_discrete(range = c(0.4, 1)) +
   theme(legend.position = "none") +
   scale_size_manual(values = c(1, 4))
@@ -146,18 +146,18 @@ p[["series"]] <- blooms[intermediates, ] |>
   mutate(time = as.integer(str_extract(name, "[0-9]+$"))) |>
   ggplot() +
   geom_line(aes(time, value, group = subject, col = class), linewidth = 0.9) +
-  scale_color_manual(values = c("#730739", "#4BA68C"))  +
+  scale_color_manual(values = c("#730739", "#4BA68C")) +
   facet_wrap(index ~ ., nrow = 2) +
   labs(x = "Time", y = "Value", title = "(c) Species 21") +
   theme(
     legend.position = "none",
     axis.text.x = element_text(size = 8)
-    )
+  )
 ```
 
 ```{r, fig.width = 10, fig.height = 8}
 ((p[["original"]] / p[["embeddings"]]) |
-(p[["pc_z"]] / p[["series"]])) +
+  (p[["pc_z"]] / p[["series"]])) +
   plot_layout(guides = "collect")
 ggsave("data/embeddings_combined.png", width = 12, height = 6)
 ```

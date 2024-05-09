@@ -47,7 +47,7 @@ attr_subset |>
   mutate(
     timepoint = as.integer(str_extract(timepoint, "[0-9]+")),
     subject = factor(subject, hclust_res$order)
-    ) |>
+  ) |>
   ggplot() +
   geom_tile(aes(timepoint, subject, fill = value)) +
   scale_fill_gradient2() +
@@ -73,14 +73,14 @@ blooms |>
   mutate(
     subject = str_remove(subject, "subject_"),
     subject = factor(subject, str_remove(subset_str, "subject_"))
-    ) |>
+  ) |>
   ggplot(aes(time, Freq)) +
   geom_line(aes(group = subject, col = class), linewidth = 0.9) +
-  scale_color_manual(values = c("#730739", "#4BA68C"))  +
+  scale_color_manual(values = c("#730739", "#4BA68C")) +
   geom_point(aes(size = abs(attribution), shape = attribution > 0)) +
   scale_size_area(max_size = 16, guide = "none") +
   scale_shape_manual(values = c(95, 43), guide = "none") +
-  facet_wrap(~ subject, scales = "free_y", nrow = 2) +
+  facet_wrap(~subject, scales = "free_y", nrow = 2) +
   labs(x = "Time", y = "Abundance", title = "IG for Species 21") +
   theme(strip.text.y = element_text(angle = 0))
 
@@ -94,7 +94,7 @@ blooms |>
   mutate(time = as.integer(str_extract(feature, "[0-9]+$"))) |>
   ggplot() +
   geom_line(
-    aes(time, Freq, group = subject), 
+    aes(time, Freq, group = subject),
     linewidth = 0.2, col = "#0c0c0c", alpha = 0.8
   ) +
   scale_x_continuous(expand = c(0, 0)) +

@@ -30,7 +30,7 @@ lasso_outputs <- function(tune_spec, wf, xy) {
     labs(x = expression(log(lambda)), y = "CV Accuracy") +
     facet_wrap(~ .metric)
 
-  final_lasso <- fit_best(lasso_grid, "accuracy")
+  final_lasso <- fit_best(lasso_grid, metric = "accuracy")
   coefs <- tidy(final_lasso$fit$fit$fit)
   p2 <- ggplot(coefs) +
     geom_hline(yintercept = 0, linewidth = 1.5) +

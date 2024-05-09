@@ -11,7 +11,6 @@ knitr::opts_chunk$set(echo = TRUE)
 ```{r}
 library(tidyverse)
 library(glue)
-my_theme <- theme_classic()
 theme_set(theme_classic())
 set.seed(20240203)
 ```
@@ -22,10 +21,10 @@ n_timepoints <- 50
 tax_id <- "tax21"
 
 feature_names <- apply(expand.grid(glue("tax{1:n_taxa}"), as.character(1:n_timepoints)), 1, paste, collapse = "_")
-attributions <- read_csv("../data/attributions.csv") |>
+attributions <- read_csv("data/attributions.csv") |>
   set_names(feature_names)
 
-blooms <- read_csv("../data/blooms.csv")
+blooms <- read_csv("data/blooms.csv")
 classes <- blooms |>
   select(subject, class) |>
   unique() |>
@@ -65,26 +64,27 @@ attr75 <- attributions |>
 
 
 ```{r}
-subset_str <- glue("subject_{hclust_res$order[25:30]}")
+subset_str <- glue("subject_{c(6, 63, hclust_res$order[seq(2, 62, length.out = 6)])}")
 blooms |>
   filter(subject %in% subset_str) |>
   select(subject, class, starts_with(tax_id)) |>
   pivot_longer(starts_with(tax_id), values_to = "Freq", names_to = "feature") |>
   left_join(attr75) |>
-  mutate(subject = factor(subject, subset_str)) |>
+  mutate(
+    subject = str_remove(subject, "subject_"),
+    subject = factor(subject, str_remove(subset_str, "subject_"))
+    ) |>
   ggplot(aes(time, Freq)) +
   geom_line(aes(group = subject, col = class), linewidth = 0.9) +
   scale_color_manual(values = c("#730739", "#4BA68C"))  +
   geom_point(aes(size = abs(attribution), shape = attribution > 0)) +
-  scale_size_area(max_size = 14) +
-  scale_shape_manual(values = c(95, 43)) +
-  facet_wrap(~ subject, scales = "free_y") +
-  labs(x = "Time", y = "Abundance", title = "Integrated Gradients for Species 21") +
-  guides(
-    size = guide_legend(override.aes = list(size = 2)),
-    shape = guide_legend(override.aes = list(size = 4))
-  ) +
+  scale_size_area(max_size = 16, guide = "none") +
+  scale_shape_manual(values = c(95, 43), guide = "none") +
+  facet_wrap(~ subject, scales = "free_y", nrow = 2) +
+  labs(x = "Time", y = "Abundance", title = "IG for Species 21") +
   theme(strip.text.y = element_text(angle = 0))
+
+ggsave("data/integrated_gradients.png", width = 8, height = 3)
 ```
 
 ```{r}

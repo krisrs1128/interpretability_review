@@ -18,15 +18,13 @@ library(patchwork)
 library(rpart.plot)
 library(tidymodels)
 library(tidyverse)
-my_theme <- theme_classic() +
-  theme()
-theme_set(my_theme)
+theme_set(theme_classic())
 set.seed(20240201)
-source("interpretable.R")
+source("estimate/interpretable.R")
 ```
 
 ```{r}
-samples <- read_csv("../data/blooms.csv") |>
+samples <- read_csv("data/blooms.csv") |>
   mutate(class = factor(class))
 xy <- select(samples, -subject)
 ```
@@ -47,10 +45,23 @@ tidy(lasso_result$fit) |>
   arrange(-estimate) |>
   select(term, estimate)
 lasso_result$plot
+
+collect_metrics(lasso_result$grid) |>
+  filter(.metric == "accuracy") |>
+  arrange(-mean)
+```
+
+```{r}
+x <- scale(select(xy, -class))
+y <- ifelse(xy$class == "healthy", 1, 0)
+in_sample <- glmnet(x, y, family = "binomial", lambda = 0.00216)
+y_hat <- predict(in_sample, x, type = "response") > 0.5
+
+err <- table(y, y_hat)
+sum(diag(err) / nrow(x))
 ```
 
 Here is the analogous code for a decision tree.
-
 
 ```{r}
 tree_spec <- decision_tree(cost_complexity = tune()) |>
@@ -58,38 +69,6 @@ tree_spec <- decision_tree(cost_complexity = tune()) |>
   set_mode("classification")
 
 final_tree <- tree_outputs(tree_spec, wf, xy)
-```
-
-Let's inspect the stability of these models...
-
-```{r}
-xy_split <- initial_split(xy, prop = 0.5)
-
-fits <- list(tree = list(), lasso = list())
-split_funs <- c(training, testing)
-for (i in seq_along(split_funs)) {
-  fits[["lasso"]][[i]] <- wf |>
-    add_model(tune_spec) |>
-    finalize_workflow(select_best(lasso_result$grid, "accuracy")) |>
-    fit(split_funs[[i]](xy_split))
-}
-
-coef_compare <- bind_rows(
-  tidy(extract_fit_parsnip(fits[["lasso"]][[1]])),
-  tidy(extract_fit_parsnip(fits[["lasso"]][[2]])),
-  .id = "split"
-) |>
-  pivot_wider(names_from = split, values_from = estimate)
-
-ggplot(coef_compare, aes(`1`, `2`)) +
-  geom_point() +
-  geom_text_repel(data = filter(coef_compare, abs(`1`) + abs(`2`) > 0.4), aes(`1`, `2`, label = term), size = 6) +
-  labs(x = "Split 1", y = "Split 2", title = expression(paste(hat(beta), " ", "across splits"))) +
-  theme(
-    axis.title = element_text(size = 20),
-    axis.text = element_text(size = 18),
-    title = element_text(size = 20)
-  )
 ```
 
 Next approach to directly interpretability is to manually define predictive
@@ -146,13 +125,34 @@ tree_result$grid |>
 tree_result$plot
 ```
 
-This does quite a bit better than ordinary glmnet. Still a little ways away from
-transformers.
+Let's inspect the stability of these models...
 
-```{r}
-# this one is cheating a little...
-nearest_neighbor(neighbors = 5) |>
-  set_mode("classification") |>
-  error_rate(xy_features)
+```{r, eval = FALSE}
+xy_split <- initial_split(xy, prop = 0.5)
+
+fits <- list(tree = list(), lasso = list())
+split_funs <- c(training, testing)
+for (i in seq_along(split_funs)) {
+  fits[["lasso"]][[i]] <- wf |>
+    add_model(tune_spec) |>
+    finalize_workflow(select_best(lasso_result$grid, metric = "accuracy")) |>
+    fit(split_funs[[i]](xy_split))
+}
+
+coef_compare <- bind_rows(
+  tidy(extract_fit_parsnip(fits[["lasso"]][[1]])),
+  tidy(extract_fit_parsnip(fits[["lasso"]][[2]])),
+  .id = "split"
+) |>
+  pivot_wider(names_from = split, values_from = estimate)
+
+ggplot(coef_compare, aes(`1`, `2`)) +
+  geom_point() +
+  geom_text_repel(data = filter(coef_compare, abs(`1`) + abs(`2`) > 0.4), aes(`1`, `2`, label = term), size = 6) +
+  labs(x = "Split 1", y = "Split 2", title = expression(paste(hat(beta), " ", "across splits"))) +
+  theme(
+    axis.title = element_text(size = 20),
+    axis.text = element_text(size = 18),
+    title = element_text(size = 20)
+  )
 ```
-

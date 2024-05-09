@@ -11,7 +11,14 @@ library(sparsepca)
 library(tidyverse)
 set.seed(20240203)
 my_theme <- theme_classic() +
-  theme()
+  theme(
+    title = element_text(size = 16),
+    axis.title = element_text(size = 16),
+    legend.title = element_text(size = 16),
+    axis.text = element_text(size = 13),
+    legend.text = element_text(size = 14),
+    strip.text = element_text(size = 16)
+  )
 theme_set(my_theme)
 ```
 
@@ -31,47 +38,35 @@ classes <- blooms |>
 ```
 
 ```{r}
+p <- list()
 pca_res <- rspca(embeddings, k = 2, alpha = alpha, beta = beta)
-p1 <- bind_cols(class = classes, pca_res$scores) |>
+eig <- round(100 * pca_res$eigenvalues / sum(pca_res$eigenvalues), 2)
+
+p[["embeddings"]] <- bind_cols(class = classes, pca_res$scores) |>
   ggplot() +
   geom_point(aes(`...3`, `...4`, col = class)) +
   scale_color_manual(values = c("#730739", "#4BA68C")) +
-  labs(x = "PC1: [34.7%]", y = "PC2: [27.9%]", col = "Class", title = "PCA of Embeddings") +
-  theme(
-    title = element_text(size = 16),
-    axis.title = element_text(size = 16),
-    legend.title = element_text(size = 16),
-    axis.text = element_text(size = 14),
-    legend.text = element_text(size = 14)
-  )
+  labs(x = glue("PC1: [{eig[1]}%]"), y = glue("PC2: [{eig[2]}%]"), col = "Class", title = "(b) Model Embeddings")
 ```
 
 ```{r}
 pca_original <- blooms |>
   select(-subject:-class) |>
   rspca(k = 2, alpha = alpha, beta = beta)
+eig <- round(100 * pca_original$eigenvalues / sum(pca_original$eigenvalues), 2)
 
-p2 <- bind_cols(class = classes, pca_original$scores) |>
+p[["original"]] <- bind_cols(class = classes, pca_original$scores) |>
   mutate(id = row_number()) |>
   ggplot() +
   geom_point(aes(`...3`, `...4`, col = class)) +
   scale_color_manual(values = c("#730739", "#4BA68C")) +
-  labs(x = "PC1: [2.6%]", y = "PC2: [2.00%]", col = "Class", title = "PCA of Original Data") +
-  theme(
-    title = element_text(size = 16),
-    axis.title = element_text(size = 16),
-    legend.title = element_text(size = 16),
-    axis.text = element_text(size = 14),
-    legend.text = element_text(size = 14)
-  )
-
-p2 + p1 +
-  plot_layout(guides = "collect")
+  labs(x = glue("PC1: [{eig[1]}%]"), y = glue("PC2: [{eig[2]}%]"), col = "Class", title = "(a) Original Data") +
+  theme(legend.position = "none")
 ```
 
 ```{r}
 tax_id <- "tax21"
-p1 <- blooms |>
+p[["all_trajectories"]] <- blooms |>
   select(subject, class, starts_with(tax_id)) |>
   sample_n(100) |>
   pivot_longer(starts_with(tax_id), values_to = "Freq") |>
@@ -82,14 +77,9 @@ p1 <- blooms |>
   scale_x_continuous(expand = c(0, 0)) +
   scale_y_continuous(expand = c(0, 0)) +
   guides(col = guide_legend(override.aes = list(linewidth = 2, alpha = 1))) +
-  labs(x = "Time", y = "Abundance", title ="Species 21") +
+  labs(x = "Time", y = "Abundance", title = "Species 21") +
   facet_grid(class ~ .) +
-  theme(
-    strip.text = element_text(size = 16),
-    axis.title = element_text(size = 18),
-    title = element_text(size = 18),
-    legend.position = "none"
-  )
+  theme(legend.position = "none")
 ```
 
 ```{r}
@@ -107,23 +97,18 @@ bind_cols(class = classes, pca_taxon$scores) |>
 pca_taxon_z <- embeddings |>
   select(starts_with(tax_id)) |>
   rspca(k = 2, alpha = alpha, beta = beta)
+eig <- round(100 * pca_taxon_z$eigenvalues / sum(pca_taxon_z$eigenvalues), 2)
   
 p2 <- bind_cols(class = classes, pca_taxon_z$scores) |>
   ggplot() +
   geom_point(aes(`...3`, `...4`, col = class)) +
-  labs(x = "PC1 [49.3% Variance]", y = "PC2 [15.6% variance]", title = "PCA of Embeddings [Species 21]") +
-  scale_color_manual(values = c("#730739", "#4BA68C"))  +
-  theme(legend.position = "null")
-
-p1 + p2 +
-  plot_layout(width = c(2, 1), guides = "collect")
+  labs(x = glue("PC1 [{eig[1]}% Variance]"), y = glue("PC2 [{eig[2]}% variance]"), title = "PCA of Embeddings [Species 21]") +
+  scale_color_manual(values = c("#730739", "#4BA68C")) 
 ```
 
 ```{r}
 endpoints <- embeddings |>
   mutate(id = row_number()) |>
-  #filter(id %in% c(110, 296)) |> # 284 -> 218 in tax128 also interesting
-  #filter(id %in% c(233, 15)) |> # 284 -> 218 in tax128 also interesting
   filter(id %in% c(111, 212)) |>
   select(starts_with(tax_id))
 
@@ -133,9 +118,8 @@ for (i in seq_along(lambdas)) {
   interpolations[[i]] <- lambdas[i] * endpoints[1, ] + (1 - lambdas[i]) * endpoints[2, ]
 }
 
-interpolations <- bind_rows(interpolations)
-
 # now find the closest points to these interpolations
+interpolations <- bind_rows(interpolations)
 embeddings_subset <- embeddings |>
   select(starts_with(tax_id))
 
@@ -143,19 +127,19 @@ D <- dist(rbind(interpolations, embeddings_subset), "manhattan") |>
   as.matrix()
 
 intermediates <- unique(apply(D[1:120, 121:ncol(D)], 1, which.min))
-
 highlight_data <- bind_cols(class = classes, pca_taxon_z$scores) |>
   mutate(highlight = row_number() %in% intermediates, id = row_number())
 
-p2 <- ggplot(highlight_data, aes(`...3`, `...4`, col = class)) +
+p[["pc_z"]] <- ggplot(highlight_data, aes(`...3`, `...4`, col = class)) +
   geom_point(aes(col = class, alpha = highlight, size = highlight)) +
-  geom_text_repel(data = filter(highlight_data, highlight), aes(label = id), nudge_x = -1.5) +
-  labs(x = "PC1 [49.3% Variance]", y = "PC2 [15.6% variance]", title = "PCA of Embeddings [Species 21]") +
+  geom_label_repel(data = filter(highlight_data, highlight), aes(label = id), nudge_x = -1.5) +
+  labs(x = glue("PC1 [{eig[1]}% Variance]"), y = glue("PC2 [{eig[2]}% variance]"), title = "(d) Interpolation") +
   scale_color_manual(values = c("#730739", "#4BA68C"))  +
-  scale_size_manual(values = c(1.5, 4)) +
-  theme(legend.position = "null")
+  scale_alpha_discrete(range = c(0.4, 1)) +
+  theme(legend.position = "none") +
+  scale_size_manual(values = c(1, 4))
 
-p1 <- blooms[intermediates, ] |>
+p[["series"]] <- blooms[intermediates, ] |>
   select(subject, class, starts_with(tax_id)) |>
   mutate(index = factor(intermediates, levels = intermediates)) |>
   pivot_longer(starts_with("tax")) |>
@@ -164,12 +148,18 @@ p1 <- blooms[intermediates, ] |>
   geom_line(aes(time, value, group = subject, col = class), linewidth = 0.9) +
   scale_color_manual(values = c("#730739", "#4BA68C"))  +
   facet_wrap(index ~ ., nrow = 2) +
-  labs(x = "Time", y = "Value", title = "Interpolation Nearest Neighbors") +
-  theme(legend.position = "none")
+  labs(x = "Time", y = "Value", title = "(c) Species 21") +
+  theme(
+    legend.position = "none",
+    axis.text.x = element_text(size = 8)
+    )
+```
 
-(p1 + p2) +
-  plot_layout(guides = "collect", widths = c(2, 1))
-ggsave("data/species_interpolation.png", width = 12, height = 4)
+```{r, fig.width = 10, fig.height = 8}
+((p[["original"]] / p[["embeddings"]]) |
+(p[["pc_z"]] / p[["series"]])) +
+  plot_layout(guides = "collect")
+ggsave("data/embeddings_combined.png", width = 12, height = 6)
 ```
 
 Which taxa would be interesting to visualize?

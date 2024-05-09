@@ -80,8 +80,8 @@ samples_long <- samples |>
   mutate(
     taxon = str_extract(feature, "tax[0-9]+"),
     time = as.integer(str_extract(feature, "[0-9]+$"))
-    )
-  
+  )
+
 features <- samples_long |>
   group_by(taxon, subject) |>
   summarise(

@@ -1,4 +1,10 @@
-This repository contains code accompanying _Data Science Principles for Interpretable and Explainable AI_:
+
+### Interpretability Review
+
+![Summary of XAI Techniques](data/xai-summary.png)
+
+This repository contains code accompanying _Data Science Principles for Interpretable and Explainable AI_. To reproduce the figures in the main text,
+you can run these notebooks. None should take longer then 5 minutes to complete.
 
 * `interpretable.Rmd`: Code for the sparse logistic regression and decision tree models on both the raw and featurized versions of microbiome trajectory data. This creates Figure 1 in the text.
 * `transformer.ipynb`: Run a transformer on the trajectory data. This trains the model that is analyzed using global embeddings and integrated gradients in the next steps.

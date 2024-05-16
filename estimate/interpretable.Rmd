@@ -166,7 +166,7 @@ to create the final version of Figure 1 in the text.
 
 ```{r}
 (p[["lasso_raw"]] / p[["lasso_features"]]) |
-(p[["tree_raw"]] / p[["tree_features"]]) |
-(p[["stability_raw"]] / p[["stability_features"]]) +
-  plot_layout(guides = "collect")
+  (p[["tree_raw"]] / p[["tree_features"]]) |
+  (p[["stability_raw"]] / p[["stability_features"]]) +
+    plot_layout(guides = "collect")
 ```

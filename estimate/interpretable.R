@@ -7,6 +7,7 @@ suppressPackageStartupMessages({
   library(patchwork)
   library(scico)
   library(ggdendro)
+  library(tictoc)
   library(tidymodels)
 })
 
@@ -16,7 +17,7 @@ lasso_plot <- function(coefs) {
     pivot_wider(names_from = "step", values_from = "estimate", values_fill = 0) |>
     column_to_rownames("term")
   term_order <- rownames(coef_wide)[hclust(dist(coef_wide), "single")$order]
-    
+
   coefs <- coefs |>
     mutate(
       lambda = factor(step, sort(unique(step), decreasing = TRUE)),
@@ -38,15 +39,17 @@ lasso_plot <- function(coefs) {
     theme(axis.text.x = element_blank(), axis.ticks = element_blank())
 }
 
-#' Wrapper to run the tidymodels glmnet workflow
+# Wrapper to run the tidymodels glmnet workflow
 lasso_outputs <- function(tune_spec, wf, xy) {
   control <- control_grid(verbose = TRUE, save_workflow = TRUE)
+  tic()
   lasso_grid <- tune_grid(
     wf |> add_model(tune_spec),
     vfold_cv(xy, v = 4),
     grid = grid_regular(penalty(range = c(-2.66610, -0.66610)), levels = 50),
     control = control
   )
+  tdiff <- toc()
 
   metrics <- collect_metrics(lasso_grid) |>
     filter(.metric == "accuracy")
@@ -60,22 +63,24 @@ lasso_outputs <- function(tune_spec, wf, xy) {
   errors <- bind_cols(class = xy$class, y_hat) |>
     count(class, .pred_class)
 
-  list(plot = p, fit = final_lasso, grid = lasso_grid, errors = errors, metrics = metrics)
+  list(plot = p, fit = final_lasso, grid = lasso_grid, errors = errors, metrics = metrics, tdiff = tdiff)
 }
 
 #' Wrapper to run the tidymodels rpart workflow
 tree_outputs <- function(tree_spec, wf, xy, metric = "accuracy") {
   control <- control_grid(verbose = TRUE, save_workflow = TRUE)
+  tic()
   tree_grid <- tune_grid(
     wf |> add_model(tree_spec),
     vfold_cv(xy, v = 4),
     grid = grid_regular(cost_complexity(), levels = 10),
     control = control
   )
+  tdiff <- toc()
 
   metrics <- collect_metrics(tree_grid) |>
     filter(.metric == metric)
-  
+
   final_tree <- fit_best(tree_grid, metric = metric)
   y_hat <- predict(final_tree, xy)
   errors <- bind_cols(class = xy$class, y_hat) |>
@@ -92,7 +97,7 @@ tree_outputs <- function(tree_spec, wf, xy, metric = "accuracy") {
     scale_x_continuous(expand = c(0.1, 0.1)) +
     theme_void() +
     theme(legend.position = "none")
-  list(fit = final_tree, metrics = metrics, grid = tree_grid, plot = p, errors = errors)
+  list(fit = final_tree, metrics = metrics, grid = tree_grid, plot = p, errors = errors, tdiff = tdiff)
 }
 
 compare_splits <- function(xy, grid) {
@@ -115,7 +120,7 @@ compare_splits <- function(xy, grid) {
     pivot_wider(names_from = split, values_from = estimate) |>
     mutate(
       term = ifelse(str_detect(term, "curvature|slope"), term, glue("original_{term}"))
-   ) |>
+    ) |>
     separate(term, c("group", "feature")) |>
     mutate(
       group = ifelse(group == "original", "original", group),
@@ -130,8 +135,7 @@ compare_splits <- function(xy, grid) {
     guides(color = guide_legend(override.aes = aes(label = "", size = 8))) +
     geom_text_repel(data = filter(coef_compare, pmin(abs(`1`), abs(`2`)) > 0), aes(`1`, `2`, label = feature), size = 6) +
     labs(x = "Split 1", y = "Split 2") +
-    scale_color_manual(values = c("#F2780C", "#35AAF2",  "#F280CA"), drop = FALSE)
+    scale_color_manual(values = c("#F2780C", "#35AAF2", "#F280CA"), drop = FALSE)
 
   list(plot = p, coef = coef_compare)
 }
-

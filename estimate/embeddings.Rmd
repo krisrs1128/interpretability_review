@@ -1,7 +1,12 @@
 ---
 title: "R Notebook"
 output: rmdformats::readthedown
+css: custom.css
+date: "`r Sys.Date()`"
 ---
+
+Let's first load the required libraries and set some parameters for this
+session. The `alpha` and `beta` parameters are used in the sparse PCA below.
 
 ```{r}
 library(glue)
@@ -20,13 +25,18 @@ my_theme <- theme_classic() +
     strip.text = element_text(size = 16)
   )
 theme_set(my_theme)
-```
 
-```{r}
 n_taxa <- 144
 n_timepoints <- 50
 alpha <- 5e-3
 beta <- 1e-2
+```
+
+Let's read in both the embedding and original dataset. We'll reduce
+dimensionality on both datasets in a few different ways in the blocks that
+follow.
+
+```{r}
 feature_names <- apply(expand.grid(glue("tax{1:n_taxa}"), glue("t{1:n_timepoints}")), 1, paste, collapse = "_")
 
 embeddings <- read_csv("data/embeddings.csv", col_names = FALSE) |>
@@ -36,6 +46,10 @@ classes <- blooms |>
   select(class) |>
   mutate(id = row_number())
 ```
+
+### Model vs. Original PCA Visualizations
+
+First, we'll run PCA on the model's learned representations.
 
 ```{r}
 p <- list()
@@ -48,6 +62,10 @@ p[["embeddings"]] <- bind_cols(class = classes, pca_res$scores) |>
   scale_color_manual(values = c("#730739", "#4BA68C")) +
   labs(x = glue("PC1: [{eig[1]}%]"), y = glue("PC2: [{eig[2]}%]"), col = "Class", title = "(b) Model Embeddings")
 ```
+
+This runs a PCA on the original data. It could have been run without ever
+running any transformer prediction. The classes largely overlap, suggesting that
+most of the variation in this model is not necessarily related to class.
 
 ```{r}
 pca_original <- blooms |>
@@ -63,6 +81,14 @@ p[["original"]] <- bind_cols(class = classes, pca_original$scores) |>
   labs(x = glue("PC1: [{eig[1]}%]"), y = glue("PC2: [{eig[2]}%]"), col = "Class", title = "(a) Original Data") +
   theme(legend.position = "none")
 ```
+
+### Taxon-Specific Visualization
+
+The reduction above was computed using all taxa. What if we reduce
+dimensionality on only the embeddings that correspond to Taxon 21? This will
+give us a more focused view on variation from this taxon that might be related
+to class differences. First, let's visualize a random sample of trajectories
+for this taxon.
 
 ```{r}
 tax_id <- "tax21"
@@ -81,6 +107,8 @@ p[["all_trajectories"]] <- blooms |>
   facet_grid(class ~ .) +
   theme(legend.position = "none")
 ```
+
+We can now run the PCA on original and embedded data, restricted to the species.
 
 ```{r}
 pca_taxon <- blooms |>
@@ -106,7 +134,18 @@ p2 <- bind_cols(class = classes, pca_taxon_z$scores) |>
   scale_color_manual(values = c("#730739", "#4BA68C"))
 ```
 
+### Interpolation Visualization
+
+Our next analysis visualizes the samples that lie along the high-dimensional
+line between samples 111 and 212. We can see how change in the embedding space
+relates to smooth change in the samples, but across nontrivial features. The
+vector `lambda` tracks steps along the interpolation. At each step, we look for
+the closest sample in the embedding space (stored in the matrix `D`). We save
+the unique nearest neighbors along this trajectory into the data.frame 
+`highlight_data`.
+
 ```{r}
+# define the interpolating line
 endpoints <- embeddings |>
   mutate(id = row_number()) |>
   filter(id %in% c(111, 212)) |>
@@ -118,7 +157,7 @@ for (i in seq_along(lambdas)) {
   interpolations[[i]] <- lambdas[i] * endpoints[1, ] + (1 - lambdas[i]) * endpoints[2, ]
 }
 
-# now find the closest points to these interpolations
+# get the nearest neighbors along the line
 interpolations <- bind_rows(interpolations)
 embeddings_subset <- embeddings |>
   select(starts_with(tax_id))
@@ -129,11 +168,18 @@ D <- dist(rbind(interpolations, embeddings_subset), "manhattan") |>
 intermediates <- unique(apply(D[1:120, 121:ncol(D)], 1, which.min))
 highlight_data <- bind_cols(class = classes, pca_taxon_z$scores) |>
   mutate(highlight = row_number() %in% intermediates, id = row_number())
+```
 
+Let's visualize the samples that we've identified as neighbors along the
+trajectory. The first plot is the PCA with interpolation points overlaid, the
+second shows the original trajectories for those samples. A little messy...
+mostly for refining the figure appearance, though.
+
+```{r}
 p[["pc_z"]] <- ggplot(highlight_data, aes(`...3`, `...4`, col = class)) +
   geom_point(aes(col = class, alpha = highlight, size = highlight)) +
   geom_label_repel(data = filter(highlight_data, highlight), aes(label = id), nudge_x = -1.5) +
-  labs(x = glue("PC1 [{eig[1]}% Variance]"), y = glue("PC2 [{eig[2]}% variance]"), title = "(d) Interpolation") +
+  labs(x = glue("PC1 [{eig[1]}% Variance]"), y = glue("PC2 [{eig[2]}% variance]"), title = "(c) Interpolation") +
   scale_color_manual(values = c("#730739", "#4BA68C")) +
   scale_alpha_discrete(range = c(0.4, 1)) +
   theme(legend.position = "none") +
@@ -148,36 +194,18 @@ p[["series"]] <- blooms[intermediates, ] |>
   geom_line(aes(time, value, group = subject, col = class), linewidth = 0.9) +
   scale_color_manual(values = c("#730739", "#4BA68C")) +
   facet_wrap(index ~ ., nrow = 2) +
-  labs(x = "Time", y = "Value", title = "(c) Species 21") +
+  labs(x = "Time", y = "Value", title = "(d) Species 21") +
   theme(
     legend.position = "none",
     axis.text.x = element_text(size = 8)
   )
 ```
 
+Finally, we combine all the figures above into the figure used in the article.
+
 ```{r, fig.width = 10, fig.height = 8}
 ((p[["original"]] / p[["embeddings"]]) |
   (p[["pc_z"]] / p[["series"]])) +
   plot_layout(guides = "collect")
-ggsave("data/embeddings_combined.png", width = 12, height = 6)
-```
-
-Which taxa would be interesting to visualize?
-
-```{r, eval = FALSE}
-p <- list()
-for (i in seq_len(n_taxa)) {
-  taxa_data <- embeddings |>
-    select(starts_with(glue("tax{i}_"))) |>
-    as.matrix()
-
-  pca_res <- princomp(taxa_data)
-  p[[i]] <- bind_cols(class = classes, pca_res$scores[, 1:5]) |>
-    ggplot() +
-    geom_point(aes(Comp.1, Comp.2, col = class))
-}
-
-for (i in seq_along(p)) {
-  ggsave(glue("~/Downloads/tax_{i}.png"), p[[i]])
-}
+# ggsave("data/embeddings_combined.png", width = 12, height = 6)
 ```

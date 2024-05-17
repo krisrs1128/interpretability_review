@@ -1,6 +1,7 @@
 ---
-title: "Untitled"
-output: html_document
+title: "Visualization Integrated Gradients"
+output: rmdformats::readthedown
+css: custom.css
 date: "`r Sys.Date()`"
 ---
 
@@ -8,18 +9,25 @@ date: "`r Sys.Date()`"
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
+This notebook visualizes the integrated gradients saved in
+`integrated_gradients.ipynb`. We first setup our notebook with libraries and
+visualization-specific parameters.
+
 ```{r}
 library(tidyverse)
 library(glue)
 theme_set(theme_classic())
 set.seed(20240203)
-```
 
-```{r}
 n_taxa <- 144
 n_timepoints <- 50
 tax_id <- "tax21"
+```
 
+We next read in and lighltly process the integrated gradient attributions along
+with the original data, onto which we'll overlay the explanations.
+
+```{r}
 feature_names <- apply(expand.grid(glue("tax{1:n_taxa}"), as.character(1:n_timepoints)), 1, paste, collapse = "_")
 attributions <- read_csv("data/attributions.csv") |>
   set_names(feature_names)
@@ -30,6 +38,11 @@ classes <- blooms |>
   unique() |>
   pull(class)
 ```
+
+We can visualize all the gradients simultaneously by generating a heatmap. To
+order attributions (so that similar rows go near to one another), we'll use the
+leaf ordering from a hierarchical clustering. This ordering is saved in
+`hclust_res`.
 
 ```{r}
 attr_subset <- attributions |>
@@ -54,6 +67,9 @@ attr_subset |>
   scale_x_continuous(expand = c(0, 0))
 ```
 
+Alternatively, we can overlay the gradients onto the original data, but just for
+a subset of samples and taxa. The taxa filtering is done in the block below.
+
 ```{r}
 attr75 <- attributions |>
   mutate(subject = glue("subject_{row_number()}")) |>
@@ -62,6 +78,8 @@ attr75 <- attributions |>
   mutate(time = as.integer(str_extract(feature, "[0-9]+$")))
 ```
 
+Next, we filter the samples and visualize the combined original data
+(`geom_line`) and gradient overlays (`geom_point`).
 
 ```{r}
 subset_str <- glue("subject_{c(6, 63, hclust_res$order[seq(2, 62, length.out = 6)])}")
@@ -84,20 +102,5 @@ blooms |>
   labs(x = "Time", y = "Abundance", title = "IG for Species 21") +
   theme(strip.text.y = element_text(angle = 0))
 
-ggsave("data/integrated_gradients.png", width = 8, height = 3)
+# ggsave("data/integrated_gradients.png", width = 8, height = 3)
 ```
-
-```{r}
-blooms |>
-  select(subject, class, starts_with(tax_id)) |>
-  pivot_longer(starts_with(tax_id), names_to = "feature", values_to = "Freq") |>
-  mutate(time = as.integer(str_extract(feature, "[0-9]+$"))) |>
-  ggplot() +
-  geom_line(
-    aes(time, Freq, group = subject),
-    linewidth = 0.2, col = "#0c0c0c", alpha = 0.8
-  ) +
-  scale_x_continuous(expand = c(0, 0)) +
-  facet_grid(class ~ .)
-```
-

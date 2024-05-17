@@ -148,7 +148,7 @@ the unique nearest neighbors along this trajectory into the data.frame
 # define the interpolating line
 endpoints <- embeddings |>
   mutate(id = row_number()) |>
-  filter(id %in% c(111, 212)) |>
+  filter(id %in% c(110, 378)) |>
   select(starts_with(tax_id))
 
 interpolations <- list()
@@ -207,5 +207,5 @@ Finally, we combine all the figures above into the figure used in the article.
 ((p[["original"]] / p[["embeddings"]]) |
   (p[["pc_z"]] / p[["series"]])) +
   plot_layout(guides = "collect")
-# ggsave("data/embeddings_combined.png", width = 12, height = 6)
+#ggsave("data/embeddings_combined.png", width = 12, height = 6)
 ```

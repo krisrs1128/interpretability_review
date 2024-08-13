@@ -96,7 +96,7 @@ p[["subcommunities"]] <- as.data.frame(x) |>
 ```
 
 ```{r}
-n_samples <- 500
+n_samples <- 10000
 n_concepts <- 25
 n_timepoints <- 50
 n_taxa <- 144

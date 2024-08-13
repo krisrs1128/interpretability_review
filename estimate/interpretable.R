@@ -11,6 +11,10 @@ suppressPackageStartupMessages({
   library(tidymodels)
 })
 
+errors <- function(result) {
+  result$errors$n[c(1, 4)] / sum(result$errors$n)
+}
+
 lasso_plot <- function(coefs) {
   coef_wide <- coefs |>
     select(term, step, estimate) |>

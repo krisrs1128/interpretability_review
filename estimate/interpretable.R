@@ -36,7 +36,10 @@ lasso_plot <- function(coefs) {
       fill = expression(hat(beta)[j]),
       color = expression(hat(beta)[j])
     ) +
-    theme(axis.text.x = element_blank(), axis.ticks = element_blank())
+    theme(
+      axis.text = element_blank(), 
+      axis.ticks = element_blank()
+    )
 }
 
 # Wrapper to run the tidymodels glmnet workflow
@@ -133,9 +136,9 @@ compare_splits <- function(xy, grid) {
     geom_hline(yintercept = 0, col = "#d3d3d3", linewidth = 1.5) +
     geom_point() +
     guides(color = guide_legend(override.aes = aes(label = "", size = 8))) +
-    geom_text_repel(data = filter(coef_compare, pmin(abs(`1`), abs(`2`)) > 0), aes(`1`, `2`, label = feature), size = 6) +
+    geom_text_repel(data = filter(coef_compare, pmin(abs(`1`), abs(`2`)) > 0), aes(`1`, `2`, label = feature), size = 4) +
     labs(x = "Split 1", y = "Split 2") +
-    scale_color_manual(values = c("#F2780C", "#35AAF2", "#F280CA"), drop = FALSE)
+    scale_color_manual("", values = c("#F2780C", "#35AAF2", "#F280CA"), drop = FALSE)
 
   list(plot = p, coef = coef_compare)
 }

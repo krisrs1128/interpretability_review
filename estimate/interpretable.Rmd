@@ -52,7 +52,10 @@ tune_spec <- logistic_reg(penalty = tune(), mixture = 1) |>
 
 lasso_result <- lasso_outputs(tune_spec, wf, xy)
 p[["lasso_raw"]] <- lasso_result$plot +
-  labs(title = "(a) Original Lasso")
+  labs(
+    title = "(a) Original Sparse LR",
+    y = "Derived Taxonomic Features"
+  )
 lasso_result
 ```
 
@@ -63,7 +66,7 @@ the data in half, tunes a lasso model on each split, and returns both the figure
 ```{r}
 p[["stability_raw"]] <- compare_splits(xy, lasso_result$grid)$p +
   theme(legend.position = "none") +
-  labs(title = "(e) Original Lasso Stability")
+  labs(title = "(e) Original Sparse LR Stability")
 ```
 
 ### Direct Decision Tree
@@ -140,11 +143,13 @@ a (mostly futile) effort to make them more readable.
 ```{r}
 lasso_result
 p[["lasso_features"]] <- lasso_result$p +
-  labs(title = "(b) Featurized Lasso") +
+  labs(
+    title = "(b) Featurized Sparse LR",
+    y = "Derived Taxonomic Features"
+    ) +
   scale_y_discrete(
     labels = \(x) str_replace(x, "curvature", "c") |> str_replace("slope", "s")
-  ) +
-  theme(axis.text.y = element_text(size = 5))
+  )
 
 tree_result
 p[["tree_features"]] <- tree_result$plot +
@@ -158,7 +163,7 @@ in both splits.
 ```{r}
 comparison <- compare_splits(xy_features, lasso_result$grid)
 p[["stability_features"]] <- comparison$plot +
-  labs(title = "(f) Featurized Lasso Stability")
+  labs(title = "(f) Featurized Sparse LR Stability")
 ```
 
 Finally, we can combine all the subfigures that we've been accumulating into `p`
@@ -169,4 +174,5 @@ to create the final version of Figure 1 in the text.
   (p[["tree_raw"]] / p[["tree_features"]]) |
   (p[["stability_raw"]] / p[["stability_features"]]) +
     plot_layout(guides = "collect")
+ggsave("~/Downloads/interpretable_figure.png", dpi = 400, width = 12, height = 6)
 ```

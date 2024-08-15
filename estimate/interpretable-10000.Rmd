@@ -16,7 +16,7 @@ library(tidyverse)
 theme_set(theme_classic())
 set.seed(20240201)
 source("estimate/interpretable.R")
-subsample <- 1000
+subsample <- 10000
 ```
 
 ## Original Data

@@ -93,14 +93,17 @@ blooms |>
     subject = factor(subject, str_remove(subset_str, "subject_"))
   ) |>
   ggplot(aes(time, Freq)) +
-  geom_line(aes(group = subject, col = class), linewidth = 0.9) +
-  scale_color_manual(values = c("#730739", "#4BA68C")) +
-  geom_point(aes(size = abs(attribution), shape = attribution > 0)) +
-  scale_size_area(max_size = 16, guide = "none") +
-  scale_shape_manual(values = c(95, 43), guide = "none") +
+  geom_line(aes(group = subject, linetype = class), linewidth = 0.5) +
+  #scale_color_manual(values = c("#730739", "#4BA68C")) +
+  geom_point(aes(size = abs(attribution), pch = attribution > 0, fill = attribution > 0)) +
+  scale_color_manual(values = c("#730739",  "#4BA68C")) +
+  scale_fill_manual(values = c("#F23E16", "#16caf2")) +
+  scale_size_area(max_size = 4, guide = "none") +
+  scale_shape_manual(values = c(21, 22)) +
+  scale_linetype_manual(values = c("solid", "dotted")) +
   facet_wrap(~subject, scales = "free_y", nrow = 2) +
-  labs(x = "Time", y = "Abundance", title = "IG for Species 21") +
+  labs(x = "Time", y = "Abundance", title = "IG for Species 21", fill = "IG > 0?", shape = "IG > 0?", col = "IG > 0?") +
   theme(strip.text.y = element_text(angle = 0))
 
-# ggsave("data/integrated_gradients.png", width = 8, height = 3)
+ggsave("data/integrated_gradients.png", width = 8, height = 3)
 ```

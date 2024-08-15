@@ -55,7 +55,8 @@ lasso_outputs <- function(tune_spec, wf, xy) {
   tdiff <- toc()
 
   metrics <- collect_metrics(lasso_grid) |>
-    filter(.metric == "accuracy")
+    filter(.metric == "accuracy") |>
+    arrange(-mean)
 
   final_lasso <- fit_best(lasso_grid, metric = "accuracy")
   p <- tidy(final_lasso$fit$fit$fit) |>

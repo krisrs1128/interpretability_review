@@ -54,7 +54,7 @@ lasso_result <- lasso_outputs(tune_spec, wf, xy)
 p[["lasso_raw"]] <- lasso_result$plot +
   labs(
     title = "(a) Original Sparse LR",
-    y = "Derived Taxonomic Features"
+    y = "Original Taxonomic Features"
   )
 lasso_result
 ```

@@ -56,7 +56,8 @@ lasso_outputs <- function(tune_spec, wf, xy) {
   tdiff <- toc()
 
   metrics <- collect_metrics(lasso_grid) |>
-    filter(.metric == "accuracy")
+    filter(.metric == "accuracy") |>
+    arrange(-mean)
 
   final_lasso <- fit_best(lasso_grid, metric = "accuracy")
   p <- tidy(final_lasso$fit$fit$fit) |>
@@ -83,7 +84,8 @@ tree_outputs <- function(tree_spec, wf, xy, metric = "accuracy") {
   tdiff <- toc()
 
   metrics <- collect_metrics(tree_grid) |>
-    filter(.metric == metric)
+    filter(.metric == metric) |>
+    arrange(-mean)
 
   final_tree <- fit_best(tree_grid, metric = metric)
   y_hat <- predict(final_tree, xy)

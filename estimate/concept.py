@@ -59,7 +59,7 @@ class LitConcept(L.LightningModule):
         super().__init__()
         self.model = model
         self.concept_hyper = concept_hyper
-        self.acc = lambda y, p: ((y == 1) * (p > 0.5)).sum().item() + ((y == 0) * (p <= 0.5)).sum().item()
+        self.acc = lambda y, logit_p: ((y == 1) * (logit_p > 0.0)).sum().item() + ((y == 0) * (logit_p <= 0.0)).sum().item()
 
     def training_step(self, batch):
         x, c, y = batch
@@ -67,8 +67,9 @@ class LitConcept(L.LightningModule):
         c_loss = nn.functional.binary_cross_entropy_with_logits(c_hat, c)
         y_loss = nn.functional.binary_cross_entropy_with_logits(y_hat, y)
         self.log("concept_loss", c_loss, on_epoch=True)
-        self.log("task_loss", y_loss, on_epoch=True)
-        self.log("train_acc", self.acc(y, y_hat), on_epoch=True, reduce_fx=sum)
+        self.log("task_loss", y_loss, on_epoch=True, on_step=False)
+        self.log("train_acc", self.acc(y, y_hat), on_epoch=True, on_step=False, reduce_fx=sum)
+        self.log("possible", 16, on_epoch=True, on_step=False, reduce_fx=sum)
         return c_loss + self.concept_hyper * y_loss
 
     def validation_step(self, batch):

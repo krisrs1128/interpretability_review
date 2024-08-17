@@ -43,7 +43,7 @@ class LitTransformer(L.LightningModule):
     def __init__(self, model):
         super().__init__()
         self.model = model
-        self.acc = lambda y, p: ((y == 1) * (p > 0.5)).sum().item() + ((y == 0) * (p <= 0.5)).sum().item()
+        self.acc = lambda y, p: ((y == 1) * (p > 0.0)).sum().item() + ((y == 0) * (p <= 0.0)).sum().item()
 
     def training_step(self, batch):
         x, y = batch

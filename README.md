@@ -1,7 +1,7 @@
 
 ### Interpretability Review
 
-This repository contains code accompanying [Data Science Principles for Interpretable and Explainable AI_](https://doi.org/10.6339/24-JDS1150). This review article gives an overview of
+This repository contains code accompanying [Data Science Principles for Interpretable and Explainable AI](https://doi.org/10.6339/24-JDS1150). This review article gives an overview of
 interpretability research through a statistical lens.
 
 ![Summary of XAI Techniques](data/xai-summary.png)
